@@ -1,0 +1,16 @@
+# Dépendances
+node_modules/
+
+# Build
+dist/
+
+# Variables d'environnement — NE JAMAIS COMMITER
+.env.local
+.env
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
