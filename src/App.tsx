@@ -1,17 +1,27 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Layout from './layouts/Layout'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import Stock from './pages/Stock'
+import Livraisons from './pages/Livraisons'
+import Fabrication from './pages/Fabrication'
+import Nomenclature from './pages/Nomenclature'
+import Historique from './pages/Historique'
 
 function App() {
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-blue-700 mb-2">MS Stock</h1>
-          <p className="text-gray-500">Mooring Solution — Gestion des stocks</p>
-          <p className="mt-4 text-sm text-green-600 font-medium">✅ Phase 0 — Environnement opérationnel</p>
-        </div>
-      </div>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login />} />
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/stock" element={<Stock />} />
+          <Route path="/livraisons" element={<Livraisons />} />
+          <Route path="/fabrication" element={<Fabrication />} />
+          <Route path="/nomenclature" element={<Nomenclature />} />
+          <Route path="/historique" element={<Historique />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )

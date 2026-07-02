@@ -16,7 +16,9 @@ export type Piece = {
   seuil_jaune: number
   seuil_vert: number
   categorie: string | null
+  description: string | null
   archivee: boolean
+  photo_url: string | null
   created_at: string
 }
 
@@ -24,6 +26,8 @@ export type SousEnsemble = {
   id: string
   nom: string
   description: string | null
+  quantite: number
+  photo_url: string | null
   created_at: string
 }
 
@@ -53,6 +57,7 @@ export type Operation = {
 export type AlerteManuelle = {
   id: string
   message: string
+  commentaire: string | null
   utilisateur_id: string
   resolue: boolean
   created_at: string
