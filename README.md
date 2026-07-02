@@ -101,6 +101,6 @@ La base de données est gérée via Supabase avec les tables principales :
 
 ---
 
-**Développé par :** Emile Leroux  
+**Développé par :** Gabriel Widmann  
 **Pour :** Mooring Solution  
 **Version :** 1.0.0
