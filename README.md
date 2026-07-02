@@ -4,7 +4,14 @@ Application SaaS de gestion des stocks développée pour Mooring Solution.
 
 ## 🚀 Lancement du site
 
-**Accès à l'application :** [https://ms-stock.vercel.app](https://ms-stock.vercel.app)
+**Déploiement à venir :** L'application n'est pas encore déployée sur Vercel.
+
+Pour lancer l'application localement :
+```bash
+npm run dev
+```
+
+L'application sera accessible sur `http://localhost:5173`
 
 ## 🛠️ Stack Technique
 
