@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { Piece } from '../types'
+import { Piece, SousEnsemble } from '../types'
 
 export type LigneConsommation = {
   piece_id: string
@@ -8,11 +8,26 @@ export type LigneConsommation = {
   quantite_stock: number
 }
 
+export type LigneConsommationSE = {
+  sous_ensemble_id: string
+  nom: string
+  quantite_necessaire: number
+  quantite_stock: number
+}
+
+export type ResultatConsommation = {
+  pieces: LigneConsommation[]
+  sousEnsembles: LigneConsommationSE[]
+}
+
 async function resoudreRecursif(
   sousEnsembleId: string,
   multiplicateur: number,
-  resultat: Map<string, LigneConsommation>,
+  resultatPieces: Map<string, LigneConsommation>,
+  resultatSE: Map<string, LigneConsommationSE>,
   piecesMap: Map<string, Piece>,
+  sousEnsemblesMap: Map<string, SousEnsemble>,
+  seReserve: Map<string, number>,
   ancetres: Set<string>
 ): Promise<void> {
   if (ancetres.has(sousEnsembleId)) return
@@ -30,11 +45,11 @@ async function resoudreRecursif(
       const piece = piecesMap.get(ligne.piece_id)
       if (!piece) continue
       const qte = ligne.quantite_requise * multiplicateur
-      const existing = resultat.get(ligne.piece_id)
+      const existing = resultatPieces.get(ligne.piece_id)
       if (existing) {
         existing.quantite_necessaire += qte
       } else {
-        resultat.set(ligne.piece_id, {
+        resultatPieces.set(ligne.piece_id, {
           piece_id: ligne.piece_id,
           nom: piece.nom,
           quantite_necessaire: qte,
@@ -42,13 +57,46 @@ async function resoudreRecursif(
         })
       }
     } else if (ligne.sous_ensemble_enfant_id) {
-      await resoudreRecursif(
-        ligne.sous_ensemble_enfant_id,
-        ligne.quantite_requise * multiplicateur,
-        resultat,
-        piecesMap,
-        cheminCourant
-      )
+      const enfantId = ligne.sous_ensemble_enfant_id
+      const qteRequise = ligne.quantite_requise * multiplicateur
+      const enfant = sousEnsemblesMap.get(enfantId)
+      const stockEnfant = enfant?.quantite ?? 0
+      const dejaReserve = seReserve.get(enfantId) ?? 0
+      const disponible = Math.max(0, stockEnfant - dejaReserve)
+      const consommeDuStock = Math.min(qteRequise, disponible)
+      const manquant = qteRequise - consommeDuStock
+
+      // Priorité au stock existant du sous-ensemble enfant : on le consomme
+      // directement sans toucher aux pièces qui le composent.
+      if (consommeDuStock > 0) {
+        seReserve.set(enfantId, dejaReserve + consommeDuStock)
+        const existing = resultatSE.get(enfantId)
+        if (existing) {
+          existing.quantite_necessaire += consommeDuStock
+        } else {
+          resultatSE.set(enfantId, {
+            sous_ensemble_id: enfantId,
+            nom: enfant?.nom ?? '—',
+            quantite_necessaire: consommeDuStock,
+            quantite_stock: stockEnfant,
+          })
+        }
+      }
+
+      // Seul le manque (si le stock du SE enfant est insuffisant) déclenche
+      // l'explosion de sa nomenclature en pièces de base.
+      if (manquant > 0) {
+        await resoudreRecursif(
+          enfantId,
+          manquant,
+          resultatPieces,
+          resultatSE,
+          piecesMap,
+          sousEnsemblesMap,
+          seReserve,
+          cheminCourant
+        )
+      }
     }
   }
 }
@@ -56,10 +104,25 @@ async function resoudreRecursif(
 export async function calcConsommation(
   sousEnsembleId: string,
   quantiteAFabriquer: number,
-  pieces: Piece[]
-): Promise<LigneConsommation[]> {
+  pieces: Piece[],
+  sousEnsembles: SousEnsemble[] = []
+): Promise<ResultatConsommation> {
   const piecesMap = new Map(pieces.map((p) => [p.id, p]))
-  const resultat = new Map<string, LigneConsommation>()
-  await resoudreRecursif(sousEnsembleId, quantiteAFabriquer, resultat, piecesMap, new Set())
-  return Array.from(resultat.values()).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  const sousEnsemblesMap = new Map(sousEnsembles.map((s) => [s.id, s]))
+  const resultatPieces = new Map<string, LigneConsommation>()
+  const resultatSE = new Map<string, LigneConsommationSE>()
+  await resoudreRecursif(
+    sousEnsembleId,
+    quantiteAFabriquer,
+    resultatPieces,
+    resultatSE,
+    piecesMap,
+    sousEnsemblesMap,
+    new Map<string, number>(),
+    new Set()
+  )
+  return {
+    pieces: Array.from(resultatPieces.values()).sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+    sousEnsembles: Array.from(resultatSE.values()).sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+  }
 }

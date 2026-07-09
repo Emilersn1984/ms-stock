@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Check, X, Factory, Wrench, AlertTriangle } from 'lucide-react'
+import { Search, Check, X, Factory, Wrench, Boxes, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { creerOperation } from '../utils/creerOperation'
-import { calcConsommation, LigneConsommation } from '../utils/calcConsommation'
+import { calcConsommation, LigneConsommation, LigneConsommationSE } from '../utils/calcConsommation'
 import { SousEnsemble, Piece } from '../types'
 
 export default function Fabrication() {
@@ -18,6 +18,7 @@ export default function Fabrication() {
   const [dropdownOuvert, setDropdownOuvert] = useState(false)
   const [quantite, setQuantite] = useState('')
   const [lignes, setLignes] = useState<LigneConsommation[]>([])
+  const [lignesSE, setLignesSE] = useState<LigneConsommationSE[]>([])
   const [calcule, setCalcule] = useState(false)
   const [chargementCalc, setChargementCalc] = useState(false)
   const [popupConfirm, setPopupConfirm] = useState(false)
@@ -62,6 +63,7 @@ export default function Fabrication() {
     setRechercheSE(se.nom)
     setDropdownOuvert(false)
     setLignes([])
+    setLignesSE([])
     setCalcule(false)
     setErreur(null)
   }
@@ -73,12 +75,13 @@ export default function Fabrication() {
     setChargementCalc(true)
     setErreur(null)
     try {
-      const result = await calcConsommation(selectionne.id, qte, pieces)
-      if (result.length === 0) {
+      const result = await calcConsommation(selectionne.id, qte, pieces, sousEnsembles)
+      if (result.pieces.length === 0 && result.sousEnsembles.length === 0) {
         setErreur('Ce sous-ensemble n\'a aucun composant. Configurez sa nomenclature d\'abord.')
         setCalcule(false)
       } else {
-        setLignes(result)
+        setLignes(result.pieces)
+        setLignesSE(result.sousEnsembles)
         setCalcule(true)
       }
     } catch {
@@ -120,15 +123,16 @@ export default function Fabrication() {
         .select('*')
         .eq('archivee', false)
       const qte = parseInt(quantite, 10)
-      const result = await calcConsommation(selectionne.id, qte, (freshPieces as Piece[]) ?? [])
-      setLignes(result)
+      const result = await calcConsommation(selectionne.id, qte, (freshPieces as Piece[]) ?? [], sousEnsembles)
+      setLignes(result.pieces)
+      setLignesSE(result.sousEnsembles)
       setPopupCorrection(false)
-      const stillNegative = result.some((l) => l.quantite_stock - l.quantite_necessaire < 0)
+      const stillNegative = result.pieces.some((l) => l.quantite_stock - l.quantite_necessaire < 0)
       if (!stillNegative) {
         setPopupConfirm(true)
       } else {
         const init: Record<string, string> = {}
-        result.filter((l) => l.quantite_stock - l.quantite_necessaire < 0).forEach((l) => {
+        result.pieces.filter((l) => l.quantite_stock - l.quantite_necessaire < 0).forEach((l) => {
           init[l.piece_id] = String(l.quantite_necessaire)
         })
         setCorrectionValues(init)
@@ -142,7 +146,7 @@ export default function Fabrication() {
   }
 
   async function confirmerFabrication() {
-    if (!selectionne || !utilisateur || lignes.length === 0) return
+    if (!selectionne || !utilisateur || (lignes.length === 0 && lignesSE.length === 0)) return
     const qte = parseInt(quantite, 10)
     setFabricationEnCours(true)
     setErreur(null)
@@ -164,6 +168,23 @@ export default function Fabrication() {
           utilisateur_id: utilisateur.id,
         })
       }
+      for (const ligneSE of lignesSE) {
+        const nouvelleQteSE = ligneSE.quantite_stock - ligneSE.quantite_necessaire
+        const { error } = await supabase
+          .from('sous_ensembles')
+          .update({ quantite: nouvelleQteSE })
+          .eq('id', ligneSE.sous_ensemble_id)
+        if (error) throw error
+        await creerOperation({
+          type: 'fabrication',
+          sous_ensemble_id: ligneSE.sous_ensemble_id,
+          quantite_avant: ligneSE.quantite_stock,
+          quantite_apres: nouvelleQteSE,
+          delta: -ligneSE.quantite_necessaire,
+          utilisateur_id: utilisateur.id,
+          commentaire: `Consommé en stock pour la fabrication de ${selectionne.nom}`,
+        })
+      }
       const { data: seActuel } = await supabase
         .from('sous_ensembles')
         .select('quantite')
@@ -175,8 +196,16 @@ export default function Fabrication() {
         .update({ quantite: qteSEActuelle + qte })
         .eq('id', selectionne.id)
 
+      const { error: erreurProduction } = await supabase.from('productions').insert({
+        sous_ensemble_id: selectionne.id,
+        quantite: qte,
+        utilisateur_id: utilisateur.id,
+      })
+      if (erreurProduction) throw erreurProduction
+
       setConfirmation({ se: selectionne.nom, qte })
       setLignes([])
+      setLignesSE([])
       setCalcule(false)
       setQuantite('')
       setSelectionne(null)
@@ -190,6 +219,7 @@ export default function Fabrication() {
   }
 
   const hasStockNegatif = lignes.some((l) => l.quantite_stock - l.quantite_necessaire < 0)
+  const hasComposants = lignes.length > 0 || lignesSE.length > 0
   const lignesInsuffisantes = lignes.filter((l) => l.quantite_stock - l.quantite_necessaire < 0)
 
   if (!utilisateur) {
@@ -337,8 +367,43 @@ export default function Fabrication() {
       </div>
 
       {/* Résultat de consommation */}
-      {calcule && lignes.length > 0 && (
+      {calcule && hasComposants && (
         <div className="mt-5">
+          {lignesSE.length > 0 && (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
+                  Sous-ensembles pris en stock — {quantite}× {selectionne?.nom}
+                </span>
+                <div className="flex-1 h-px bg-primary-100" />
+              </div>
+              <div className="space-y-1.5 mb-4">
+                {lignesSE.map((ligneSE) => {
+                  const apres = ligneSE.quantite_stock - ligneSE.quantite_necessaire
+                  return (
+                    <div key={ligneSE.sous_ensemble_id} className="flex rounded-xl overflow-hidden border border-primary-100">
+                      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: '#20808E' }} />
+                      <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0 border border-primary-100">
+                          <Boxes size={12} className="text-primary-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-primary-900 truncate">{ligneSE.nom}</p>
+                          <p className="text-xs text-primary-500 tabular-nums">Stock actuel : {ligneSE.quantite_stock}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold tabular-nums text-danger-600">−{ligneSE.quantite_necessaire}</p>
+                          <p className="text-xs font-bold tabular-nums text-primary-500">→ {apres}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {lignes.length > 0 && (
           <div className="flex items-center gap-3 mb-4">
             <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
               Pièces à consommer — {quantite}× {selectionne?.nom}
@@ -353,6 +418,7 @@ export default function Fabrication() {
               </div>
             )}
           </div>
+          )}
 
           <div className="space-y-1.5">
             {lignes.map((ligne) => {
@@ -390,7 +456,7 @@ export default function Fabrication() {
           <div className="mt-4 flex gap-3">
             <button
               type="button"
-              onClick={() => { setLignes([]); setCalcule(false) }}
+              onClick={() => { setLignes([]); setLignesSE([]); setCalcule(false) }}
               className="flex-1 border border-primary-200 text-primary-700 rounded-xl py-2.5 text-sm font-medium hover:bg-primary-50 transition-colors"
             >
               Annuler
@@ -527,6 +593,20 @@ export default function Fabrication() {
 
 
             <div className="bg-primary-50 rounded-xl divide-y divide-primary-100 mb-5 max-h-60 overflow-y-auto">
+              {lignesSE.map((ligneSE) => {
+                const apres = ligneSE.quantite_stock - ligneSE.quantite_necessaire
+                return (
+                  <div key={ligneSE.sous_ensemble_id} className="px-3.5 py-2.5 flex items-center gap-2">
+                    <span className="flex-1 text-sm text-primary-800 font-medium truncate">{ligneSE.nom}</span>
+                    <span className="text-sm font-bold tabular-nums text-danger-600 flex-shrink-0">
+                      −{ligneSE.quantite_necessaire}
+                    </span>
+                    <span className="text-xs tabular-nums ml-1 flex-shrink-0 font-semibold text-primary-500">
+                      → {apres}
+                    </span>
+                  </div>
+                )
+              })}
               {lignes.map((ligne) => {
                 const apres = ligne.quantite_stock - ligne.quantite_necessaire
                 return (

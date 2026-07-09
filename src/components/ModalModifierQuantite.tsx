@@ -37,6 +37,9 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
   const [seuilRouge, setSeuilRouge] = useState(String(piece.seuil_rouge))
   const [seuilJaune, setSeuilJaune] = useState(String(piece.seuil_jaune))
   const [seuilVert, setSeuilVert] = useState(String(piece.seuil_vert))
+  const [delaiAppro, setDelaiAppro] = useState(piece.delai_appro != null ? String(piece.delai_appro) : '')
+  const [estImpression3D, setEstImpression3D] = useState(piece.est_impression_3d)
+  const [tempsImpression, setTempsImpression] = useState(piece.temps_impression_heures != null ? String(piece.temps_impression_heures) : '')
 
   const nv = parseInt(nouvelleQuantite, 10)
   const delta = isNaN(nv) ? null : nv - piece.quantite
@@ -51,12 +54,17 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
 
   async function soumettre() {
     if (isNaN(nv)) { setErreur('Quantité invalide'); return }
+    const delaiApproValue = delaiAppro.trim() ? parseInt(delaiAppro, 10) || null : null
+    const tempsImpressionValue = tempsImpression.trim() ? parseFloat(tempsImpression) || null : null
     const adminFieldsChanged = isAdmin && (
       description !== (piece.description ?? '') ||
       categorie !== (piece.categorie ?? '') ||
       parseInt(seuilRouge, 10) !== piece.seuil_rouge ||
       parseInt(seuilJaune, 10) !== piece.seuil_jaune ||
-      parseInt(seuilVert, 10) !== piece.seuil_vert
+      parseInt(seuilVert, 10) !== piece.seuil_vert ||
+      delaiApproValue !== piece.delai_appro ||
+      estImpression3D !== piece.est_impression_3d ||
+      tempsImpressionValue !== piece.temps_impression_heures
     )
     if (nv === piece.quantite && !commentaire.trim() && !fichierPhoto && !adminFieldsChanged) { onClose(); return }
 
@@ -86,6 +94,9 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
         updatePayload.seuil_rouge = parseInt(seuilRouge, 10) || 0
         updatePayload.seuil_jaune = parseInt(seuilJaune, 10) || 0
         updatePayload.seuil_vert = parseInt(seuilVert, 10) || 0
+        updatePayload.est_impression_3d = estImpression3D
+        updatePayload.delai_appro = estImpression3D ? null : (delaiAppro.trim() ? parseInt(delaiAppro, 10) || null : null)
+        updatePayload.temps_impression_heures = estImpression3D ? (tempsImpression.trim() ? parseFloat(tempsImpression) || null : null) : null
       }
 
       const { error } = await supabase
@@ -329,6 +340,53 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
                 </div>
                 <p className="text-[10px] text-primary-400 mt-1.5">Rouge ≤ seuil rouge · Jaune ≤ seuil jaune · sinon Vert</p>
               </div>
+
+              {/* Pièce imprimée en 3D */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={estImpression3D}
+                  onChange={(e) => setEstImpression3D(e.target.checked)}
+                  className="w-4 h-4 rounded accent-primary-700"
+                />
+                <span className="text-sm font-medium text-primary-700">Pièce imprimée en 3D (production interne)</span>
+              </label>
+
+              {/* Délai d'approvisionnement OU temps d'impression */}
+              {estImpression3D ? (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                    Temps d'impression
+                    <span className="text-primary-400 font-normal normal-case tracking-normal ml-1">(heures)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={tempsImpression}
+                    onChange={(e) => setTempsImpression(e.target.value)}
+                    placeholder="Ex : 6"
+                    className="w-full border border-primary-200 rounded-xl px-3 py-2 text-primary-900 text-sm tabular-nums placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                  <p className="text-[10px] text-primary-400 mt-1">Utilisé pour prioriser la file d'impression 3D</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                    Délai d'approvisionnement
+                    <span className="text-primary-400 font-normal normal-case tracking-normal ml-1">(semaines)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={delaiAppro}
+                    onChange={(e) => setDelaiAppro(e.target.value)}
+                    placeholder="Ex : 2"
+                    className="w-full border border-primary-200 rounded-xl px-3 py-2 text-primary-900 text-sm tabular-nums placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                  <p className="text-[10px] text-primary-400 mt-1">Laisser vide si non renseigné</p>
+                </div>
+              )}
             </div>
           )}
 

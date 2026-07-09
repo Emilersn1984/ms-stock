@@ -1,11 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, Check } from 'lucide-react'
 import { useStock } from '../hooks/useStock'
 import { useAlertes } from '../hooks/useAlertes'
 import { useUtilisateur } from '../hooks/useUtilisateur'
-import { getCouleurSeuil } from '../utils/couleurSeuil'
+import { useProductionHebdo } from '../hooks/useProductionHebdo'
+import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
+import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
+import { calcImpressions3DRecommandees } from '../utils/calcImpressions3D'
+import type { Impression3DRecommandee } from '../utils/calcImpressions3D'
 import { supabase } from '../lib/supabase'
-import type { SousEnsemble, Piece, AlerteManuelle } from '../types'
+import type { SousEnsemble, AlerteManuelle } from '../types'
+
+type NomEntry = { piece_id: string; sous_ensemble_id: string; quantite_requise: number }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,16 +31,17 @@ function formatDateAlerte(dateStr: string) {
 // ─── KPI Strip ─────────────────────────────────────────────────────────────────
 
 function KpiStrip({
-  total, critiques, faibles, alertes,
-}: { total: number; critiques: number; faibles: number; alertes: number }) {
+  total, productionHebdo, aCommander, aImprimer, alertes,
+}: { total: number; productionHebdo: number; aCommander: number; aImprimer: number; alertes: number }) {
   const metrics = [
-    { val: total,     label: 'Pièces actives',  accent: 'text-white' },
-    { val: critiques, label: 'Stock critique',   accent: critiques > 0 ? 'text-danger-400'  : 'text-success-300' },
-    { val: faibles,   label: 'Stock faible',     accent: faibles   > 0 ? 'text-warning-400' : 'text-success-300' },
-    { val: alertes,   label: 'Alertes actives',  accent: alertes   > 0 ? 'text-alert-400'   : 'text-success-300' },
+    { val: total,           label: 'Pièces actives',      accent: 'text-white' },
+    { val: productionHebdo, label: 'Bouées méca / semaine', accent: productionHebdo > 0 ? 'text-success-300' : 'text-primary-400' },
+    { val: aCommander,      label: 'Pièces à commander',   accent: aCommander > 0 ? 'text-danger-400'  : 'text-success-300' },
+    { val: aImprimer,       label: 'Impressions 3D',       accent: aImprimer > 0 ? 'text-alert-400' : 'text-success-300' },
+    { val: alertes,         label: 'Alertes actives',      accent: alertes > 0 ? 'text-alert-400' : 'text-success-300' },
   ]
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 bg-primary-900 rounded-2xl overflow-hidden mb-8">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 bg-primary-900 rounded-2xl overflow-hidden mb-8">
       {metrics.map((m, i) => (
         <div key={i} className="px-6 py-5 flex flex-col gap-1.5">
           <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${m.accent}`}>
@@ -93,21 +100,83 @@ function AlerteItem({ alerte, onResoudre }: { alerte: AlerteManuelle; onResoudre
   )
 }
 
-// ─── Piece row ─────────────────────────────────────────────────────────────────
+// ─── Achat recommandé row ─────────────────────────────────────────────────────
 
-function PieceRow({ piece }: { piece: Piece }) {
-  const c = getCouleurSeuil(piece)
-  const barColor = c === 'rouge' ? 'bg-danger-500' : 'bg-warning-400'
-  const numColor = c === 'rouge' ? 'text-danger-500' : 'text-warning-600'
+function AchatRow({ achat }: { achat: AchatRecommande }) {
+  const critique = achat.urgence === 'critique'
+  const barColor = critique ? '#E53535' : '#F97316'
+  const badgeClass = critique ? 'bg-danger-100 text-danger-600' : 'bg-alert-100 text-alert-600'
+  const badgeText = critique ? 'Rupture estimée' : 'À commander'
   return (
     <div className="flex rounded-xl overflow-hidden border border-primary-100">
-      <div className={`w-[3px] flex-shrink-0 ${barColor}`} />
-      <div className="flex-1 flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white">
-        <span className="text-sm font-medium text-primary-900 truncate">{piece.nom}</span>
-        {piece.categorie && (
-          <span className="text-xs text-primary-500 hidden sm:block flex-shrink-0">{piece.categorie}</span>
+      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: barColor }} />
+      <div className="flex-1 px-3.5 py-2.5 bg-white min-w-0">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <span className="text-sm font-medium text-primary-900 truncate flex-1">{achat.piece.nom}</span>
+          <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg flex-shrink-0 ${badgeClass}`}>
+            {badgeText}
+          </span>
+        </div>
+        {achat.source === 'predictive' ? (
+          <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-primary-500 tabular-nums flex-wrap">
+            <span>Stock: <span className="font-bold text-primary-700">{achat.piece.quantite}</span></span>
+            {achat.consommationHebdo > 0 && (
+              <span>Conso: <span className="font-bold">{achat.consommationHebdo}/sem</span></span>
+            )}
+            {achat.piece.delai_appro != null && (
+              <span>Délai: <span className="font-bold">{achat.piece.delai_appro} sem</span></span>
+            )}
+            <span className={critique ? 'text-danger-600 font-bold' : 'text-alert-600 font-bold'}>
+              Restant estimé: {achat.stockRestantEstime}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-xs text-primary-500 tabular-nums">
+            <span>Stock: <span className="font-bold text-primary-700">{achat.piece.quantite}</span></span>
+            <span className="text-primary-400">· seuil statique</span>
+          </div>
         )}
-        <span className={`text-sm font-bold tabular-nums flex-shrink-0 ${numColor}`}>{piece.quantite}</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Impression 3D row ──────────────────────────────────────────────
+
+function ImpressionRow({ impression }: { impression: Impression3DRecommandee }) {
+  const critique = impression.urgence === 'critique'
+  const barColor = critique ? '#E53535' : '#F97316'
+  const badgeClass = critique ? 'bg-danger-100 text-danger-600' : 'bg-alert-100 text-alert-600'
+  const badgeText = critique ? 'Impression urgente' : 'À lancer'
+  return (
+    <div className="flex rounded-xl overflow-hidden border border-primary-100">
+      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: barColor }} />
+      <div className="flex-1 px-3.5 py-2.5 bg-white min-w-0">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <span className="text-sm font-medium text-primary-900 truncate flex-1">{impression.piece.nom}</span>
+          <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg flex-shrink-0 ${badgeClass}`}>
+            {badgeText}
+          </span>
+        </div>
+        {impression.source === 'predictive' ? (
+          <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-primary-500 tabular-nums flex-wrap">
+            <span>Stock: <span className="font-bold text-primary-700">{impression.piece.quantite}</span></span>
+            {impression.consommationHebdo > 0 && (
+              <span>Conso: <span className="font-bold">{impression.consommationHebdo}/sem</span></span>
+            )}
+            {impression.tempsImpressionHeures != null && (
+              <span>Impression: <span className="font-bold">{impression.tempsImpressionHeures}h</span></span>
+            )}
+            <span className={critique ? 'text-danger-600 font-bold' : 'text-alert-600 font-bold'}>
+              Restant estimé: {impression.stockRestantEstime}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-xs text-primary-500 tabular-nums">
+            <span>Stock: <span className="font-bold text-primary-700">{impression.piece.quantite}</span></span>
+            <span className="text-primary-400">· seuil statique</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -143,8 +212,10 @@ export default function Dashboard() {
   const { utilisateur } = useUtilisateur()
   const { pieces, chargement: chargementStock } = useStock()
   const { alertes, chargement: chargementAlertes, creerAlerte, resoudreAlerte } = useAlertes()
+  const { totalHebdo, consommationMoyenne, chargement: chargementProd } = useProductionHebdo()
 
   const [sousEnsembles, setSousEnsembles] = useState<SousEnsemble[]>([])
+  const [nomenclature, setNomenclature] = useState<NomEntry[]>([])
   const [chargementSE, setChargementSE] = useState(true)
 
   const [showModal, setShowModal] = useState(false)
@@ -154,16 +225,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function charger() {
-      const { data: seData } = await supabase.from('sous_ensembles').select('*').order('nom')
+      const [{ data: seData }, { data: nomData }] = await Promise.all([
+        supabase.from('sous_ensembles').select('*').order('nom'),
+        supabase.from('nomenclature').select('piece_id, sous_ensemble_id, quantite_requise').not('piece_id', 'is', null),
+      ])
       setSousEnsembles((seData as SousEnsemble[]) ?? [])
+      setNomenclature((nomData as NomEntry[]) ?? [])
       setChargementSE(false)
     }
     charger()
   }, [])
 
-  const piecesCritiques = pieces.filter((p) => getCouleurSeuil(p) === 'rouge')
-  const piecesFaibles = pieces.filter((p) => getCouleurSeuil(p) === 'jaune')
-  const chargement = chargementStock || chargementAlertes || chargementSE
+  const achatsRecommandes = useMemo(
+    () => calcAchatsRecommandes(pieces, nomenclature, consommationMoyenne),
+    [pieces, nomenclature, consommationMoyenne]
+  )
+
+  const impressions3D = useMemo(
+    () => calcImpressions3DRecommandees(pieces, nomenclature, consommationMoyenne),
+    [pieces, nomenclature, consommationMoyenne]
+  )
+
+  const conso3DActive = consommationMoyenne.some((c) => c.quantite > 0)
+
+  const chargement = chargementStock || chargementAlertes || chargementSE || chargementProd
 
   async function handleCreerAlerte() {
     if (!messageAlerte.trim() || !utilisateur) return
@@ -210,8 +295,9 @@ export default function Dashboard() {
           {/* KPI strip */}
           <KpiStrip
             total={pieces.length}
-            critiques={piecesCritiques.length}
-            faibles={piecesFaibles.length}
+            productionHebdo={totalHebdo}
+            aCommander={achatsRecommandes.length}
+            aImprimer={impressions3D.length}
             alertes={alertes.length}
           />
 
@@ -236,37 +322,53 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Colonne droite — Stocks en tension */}
-            <div className="space-y-7">
-              <div>
-                <SectionLabel
-                  texte="Stocks critiques"
-                  count={piecesCritiques.length}
-                  accent={piecesCritiques.length > 0 ? 'text-danger-500' : 'text-primary-400'}
-                />
-                {piecesCritiques.length === 0 ? (
-                  <EtatVide texte="Aucun stock critique" />
-                ) : (
-                  <div className="space-y-1.5">
-                    {piecesCritiques.map((p) => <PieceRow key={p.id} piece={p} />)}
-                  </div>
-                )}
-              </div>
-              <div>
-                <SectionLabel
-                  texte="Stocks faibles"
-                  count={piecesFaibles.length}
-                  accent={piecesFaibles.length > 0 ? 'text-warning-500' : 'text-primary-400'}
-                />
-                {piecesFaibles.length === 0 ? (
-                  <EtatVide texte="Aucun stock faible" />
-                ) : (
-                  <div className="space-y-1.5">
-                    {piecesFaibles.map((p) => <PieceRow key={p.id} piece={p} />)}
-                  </div>
-                )}
-              </div>
+            {/* Colonne droite — Achats recommandés */}
+            <div>
+              <SectionLabel
+                texte="Achats recommandés"
+                count={achatsRecommandes.length}
+                accent={achatsRecommandes.length > 0 ? 'text-danger-500' : 'text-primary-400'}
+              />
+              {conso3DActive && (
+                <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide mb-3">
+                  Basé sur la plus forte production entre cette semaine et la précédente
+                </p>
+              )}
+              {achatsRecommandes.length === 0 ? (
+                <EtatVide texte={
+                  !conso3DActive
+                    ? 'Aucune production récente déclarée — déclarez une fabrication pour activer les prévisions'
+                    : 'Aucun achat requis — tous les stocks sont suffisants'
+                } />
+              ) : (
+                <div className="space-y-1.5">
+                  {achatsRecommandes.map((a) => (
+                    <AchatRow key={a.piece.id} achat={a} />
+                  ))}
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* File d'impression 3D */}
+          <div className="mb-10">
+            <SectionLabel
+              texte="File d'impression 3D"
+              count={impressions3D.length}
+              accent={impressions3D.length > 0 ? 'text-alert-500' : 'text-primary-400'}
+            />
+            <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide mb-3">
+              Pièces produites en interne — triées par urgence selon le temps d'impression
+            </p>
+            {impressions3D.length === 0 ? (
+              <EtatVide texte="Aucune impression 3D urgente — tous les stocks sont suffisants" />
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-1.5">
+                {impressions3D.map((imp) => (
+                  <ImpressionRow key={imp.piece.id} impression={imp} />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Sous-ensembles */}

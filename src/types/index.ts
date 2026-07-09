@@ -19,6 +19,17 @@ export type Piece = {
   description: string | null
   archivee: boolean
   photo_url: string | null
+  delai_appro: number | null
+  est_impression_3d: boolean
+  temps_impression_heures: number | null
+  created_at: string
+}
+
+export type Production = {
+  id: string
+  sous_ensemble_id: string
+  quantite: number
+  utilisateur_id: string | null
   created_at: string
 }
 

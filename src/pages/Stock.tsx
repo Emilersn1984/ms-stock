@@ -382,6 +382,7 @@ export default function Stock() {
                   <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce</th>
                   <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Catégorie</th>
                   <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
+                  <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Délai appro</th>
                   <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Statut</th>
                   <th className="px-5 py-3.5" />
                 </tr>
@@ -414,6 +415,15 @@ export default function Stock() {
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <span className={`text-xl font-bold tabular-nums ${QTY_CLASS[couleur]}`}>{piece.quantite}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-center">
+                        {piece.delai_appro != null ? (
+                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 border border-primary-100 rounded-full px-2.5 py-1 whitespace-nowrap">
+                            {piece.delai_appro} sem.
+                          </span>
+                        ) : (
+                          <span className="text-primary-300">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         <span className={`text-xs font-bold uppercase tracking-wide ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</span>
@@ -452,7 +462,14 @@ export default function Stock() {
                       <img src={piece.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPhotoLightbox(piece.photo_url!)} />
                     )}
                     <div className="flex-shrink-0 text-right">
-                      <p className={`text-xl font-bold tabular-nums leading-tight ${QTY_CLASS[couleur]}`}>{piece.quantite}</p>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <p className={`text-xl font-bold tabular-nums leading-tight ${QTY_CLASS[couleur]}`}>{piece.quantite}</p>
+                        {piece.delai_appro != null && (
+                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 border border-primary-100 rounded-full px-2 py-0.5 whitespace-nowrap">
+                            {piece.delai_appro} sem.
+                          </span>
+                        )}
+                      </div>
                       <p className={`text-[10px] uppercase tracking-wide font-bold ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</p>
                     </div>
                     {utilisateur && (

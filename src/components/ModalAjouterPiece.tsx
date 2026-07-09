@@ -18,6 +18,9 @@ type FormData = {
   seuil_jaune: string
   seuil_vert: string
   categorie: string
+  delai_appro: string
+  est_impression_3d: boolean
+  temps_impression_heures: string
 }
 
 const FORM_INIT: FormData = {
@@ -27,6 +30,9 @@ const FORM_INIT: FormData = {
   seuil_jaune: '5',
   seuil_vert: '10',
   categorie: '',
+  delai_appro: '',
+  est_impression_3d: false,
+  temps_impression_heures: '',
 }
 
 export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, onClose, onSuccess }: Props) {
@@ -37,7 +43,7 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  function setField(key: keyof FormData, value: string) {
+  function setField(key: keyof FormData, value: string | boolean) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
@@ -71,6 +77,11 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
           seuil_vert: parseInt(form.seuil_vert, 10) || 0,
           categorie: form.categorie.trim() || null,
           archivee: false,
+          delai_appro: form.est_impression_3d ? null : (form.delai_appro.trim() ? parseInt(form.delai_appro, 10) || null : null),
+          est_impression_3d: form.est_impression_3d,
+          temps_impression_heures: form.est_impression_3d
+            ? (form.temps_impression_heures.trim() ? parseFloat(form.temps_impression_heures) || null : null)
+            : null,
         })
         .select()
         .single()
@@ -215,6 +226,59 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
               className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 text-lg font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
             />
           </div>
+
+          {/* Pièce imprimée en 3D */}
+          <div className="border border-primary-100 rounded-xl p-3.5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.est_impression_3d}
+                onChange={(e) => setField('est_impression_3d', e.target.checked)}
+                className="w-4 h-4 rounded accent-primary-700"
+              />
+              <span className="text-sm font-medium text-primary-700">Pièce imprimée en 3D (production interne)</span>
+            </label>
+          </div>
+
+          {/* Délai d'approvisionnement OU temps d'impression */}
+          {form.est_impression_3d ? (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Temps d'impression{' '}
+                <span className="text-primary-400 font-normal normal-case tracking-normal">(en heures, facultatif)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={form.temps_impression_heures}
+                onChange={(e) => setField('temps_impression_heures', e.target.value)}
+                placeholder="Ex : 6"
+                className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 placeholder-primary-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+              <p className="text-xs text-primary-400 mt-1">
+                Utilisé pour prioriser la file d'impression 3D
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Délai d'approvisionnement{' '}
+                <span className="text-primary-400 font-normal normal-case tracking-normal">(en semaines, facultatif)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.delai_appro}
+                onChange={(e) => setField('delai_appro', e.target.value)}
+                placeholder="Ex : 2"
+                className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 placeholder-primary-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+              <p className="text-xs text-primary-400 mt-1">
+                Utilisé pour calculer les besoins d'achat prévisionnels
+              </p>
+            </div>
+          )}
 
           {/* Seuils */}
           <div>
