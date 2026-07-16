@@ -77,11 +77,12 @@ function SeListItem({ se, index, isSelected, onSelect, onPhoto }: {
   )
 }
 
-function ComposantCard({ comp, index, onSupprimer, onPhoto }: {
+function ComposantCard({ comp, index, onSupprimer, onPhoto, estPatron }: {
   comp: ComposantLigne
   index: number
   onSupprimer: (id: string) => void
   onPhoto: (url: string) => void
+  estPatron: boolean
 }) {
   const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
   return (
@@ -111,13 +112,15 @@ function ComposantCard({ comp, index, onSupprimer, onPhoto }: {
         <span className="text-sm font-bold tabular-nums text-primary-700 flex-shrink-0">
           ×{comp.quantite_requise}
         </span>
-        <button
-          onClick={() => onSupprimer(comp.id)}
-          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-1"
-          title="Supprimer"
-        >
-          <X size={13} />
-        </button>
+        {estPatron && (
+          <button
+            onClick={() => onSupprimer(comp.id)}
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-1"
+            title="Supprimer"
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
     </div>
   )
@@ -217,6 +220,7 @@ export default function Nomenclature() {
   }
 
   async function sauvegarderSE() {
+    if (!estPatron) return
     if (!modalSE.nom.trim()) return
     setEnregistrement(true)
     try {
@@ -284,6 +288,7 @@ export default function Nomenclature() {
   }
 
   async function ajouterComposant() {
+    if (!estPatron) return
     const ids = Object.keys(modalComp.selection)
     if (!selectionne || ids.length === 0) { setErreurComp('Sélectionnez au moins un élément'); return }
     setAjoutComp(true)
@@ -307,6 +312,7 @@ export default function Nomenclature() {
   }
 
   async function supprimerComposant(id: string) {
+    if (!estPatron) return
     await supabase.from('nomenclature').delete().eq('id', id)
     setComposants((prev) => prev.filter((c) => c.id !== id))
   }
@@ -413,13 +419,15 @@ export default function Nomenclature() {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => setModalSE({ ouvert: true, mode: 'editer', nom: selectionne.nom, description: selectionne.description ?? '' })}
-                  className="flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors flex-shrink-0"
-                >
-                  <Pencil size={13} />
-                  Modifier
-                </button>
+                {estPatron && (
+                  <button
+                    onClick={() => setModalSE({ ouvert: true, mode: 'editer', nom: selectionne.nom, description: selectionne.description ?? '' })}
+                    className="flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors flex-shrink-0"
+                  >
+                    <Pencil size={13} />
+                    Modifier
+                  </button>
+                )}
               </div>
 
               {/* Section composants */}
@@ -431,13 +439,15 @@ export default function Nomenclature() {
                 {composants.length > 0 && (
                   <span className="text-xs font-semibold text-primary-600 tabular-nums">{composants.length}</span>
                 )}
-                <button
-                  onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
-                  className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 hover:text-primary-900 transition-colors"
-                >
-                  <Plus size={11} />
-                  Ajouter
-                </button>
+                {estPatron && (
+                  <button
+                    onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
+                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 hover:text-primary-900 transition-colors"
+                  >
+                    <Plus size={11} />
+                    Ajouter
+                  </button>
+                )}
               </div>
 
               {chargementComp ? (
@@ -447,12 +457,14 @@ export default function Nomenclature() {
               ) : composants.length === 0 ? (
                 <div className="py-10 border border-dashed border-primary-200 rounded-xl text-center">
                   <p className="text-sm text-primary-400 italic mb-2">Aucun composant défini</p>
-                  <button
-                    onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
-                    className="text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
-                  >
-                    + Ajouter le premier composant
-                  </button>
+                  {estPatron && (
+                    <button
+                      onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
+                      className="text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
+                    >
+                      + Ajouter le premier composant
+                    </button>
+                  )}
                 </div>
               ) : (() => {
                 const sousEnsemblesComp = composants.filter((c) => c.type === 'sous_ensemble')
@@ -470,7 +482,7 @@ export default function Nomenclature() {
                         </div>
                         <div className="space-y-1.5">
                           {sousEnsemblesComp.map((comp, i) => (
-                            <ComposantCard key={comp.id} comp={comp} index={i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} />
+                            <ComposantCard key={comp.id} comp={comp} index={i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} estPatron={estPatron} />
                           ))}
                         </div>
                       </div>
@@ -486,7 +498,7 @@ export default function Nomenclature() {
                         </div>
                         <div className="space-y-1.5">
                           {piecesComp.map((comp, i) => (
-                            <ComposantCard key={comp.id} comp={comp} index={sousEnsemblesComp.length + i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} />
+                            <ComposantCard key={comp.id} comp={comp} index={sousEnsemblesComp.length + i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} estPatron={estPatron} />
                           ))}
                         </div>
                       </div>
