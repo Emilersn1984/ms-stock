@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Plus, Pencil, Search, Layers, Wrench, X, Check, ChevronDown, ChevronUp, Camera } from 'lucide-react'
 import PhotoLightbox from '../components/PhotoLightbox'
+import AnimatedList from '../components/AnimatedList'
+import { useAnimatedListItem } from '../hooks/useAnimatedListItem'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
@@ -33,6 +35,92 @@ type ModalCompState = {
 const MODAL_SE_VIDE: ModalSEState = { ouvert: false, mode: 'creer', nom: '', description: '' }
 const MODAL_COMP_VIDE: ModalCompState = {
   ouvert: false, typeComp: 'piece', recherche: '', selection: {},
+}
+
+function SeListItem({ se, index, isSelected, onSelect, onPhoto }: {
+  se: SousEnsemble
+  index: number
+  isSelected: boolean
+  onSelect: () => void
+  onPhoto: (url: string) => void
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLButtonElement>(index)
+  return (
+    <button ref={ref} style={style} onClick={onSelect} className="w-full text-left">
+      <div className={`flex rounded-xl overflow-hidden border transition-colors ${
+        isSelected ? 'border-primary-200' : 'border-primary-100 hover:border-primary-200'
+      }`}>
+        <div
+          className="w-[3px] flex-shrink-0 transition-colors"
+          style={{ backgroundColor: isSelected ? '#074750' : 'transparent' }}
+        />
+        <div className={`flex-1 flex items-center gap-2 px-3.5 py-2.5 transition-colors ${isSelected ? 'bg-primary-50' : 'bg-white'}`}>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-medium truncate ${isSelected ? 'text-primary-900' : 'text-primary-700'}`}>
+              {se.nom}
+            </p>
+            {se.description && (
+              <p className="text-xs text-primary-500 truncate mt-0.5">{se.description}</p>
+            )}
+          </div>
+          {se.photo_url && (
+            <img
+              src={se.photo_url}
+              alt=""
+              className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={(e) => { e.stopPropagation(); onPhoto(se.photo_url!) }}
+            />
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ComposantCard({ comp, index, onSupprimer, onPhoto }: {
+  comp: ComposantLigne
+  index: number
+  onSupprimer: (id: string) => void
+  onPhoto: (url: string) => void
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
+  return (
+    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
+      <div
+        className="w-[3px] flex-shrink-0"
+        style={{ backgroundColor: comp.type === 'piece' ? '#22B84F' : '#F97316' }}
+      />
+      <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
+        {comp.photo_url ? (
+          <img src={comp.photo_url} alt={comp.nom} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(comp.photo_url!)} />
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0 border border-primary-100">
+            {comp.type === 'piece'
+              ? <Wrench size={13} className="text-primary-400" />
+              : <Layers size={13} className="text-alert-400" />
+            }
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-primary-900 truncate">{comp.nom}</p>
+          {comp.type === 'piece' && comp.description
+            ? <p className="text-xs text-primary-400 truncate">{comp.description}</p>
+            : <p className="text-xs text-primary-500">{comp.type === 'piece' ? 'Pièce' : 'Sous-ensemble'}</p>
+          }
+        </div>
+        <span className="text-sm font-bold tabular-nums text-primary-700 flex-shrink-0">
+          ×{comp.quantite_requise}
+        </span>
+        <button
+          onClick={() => onSupprimer(comp.id)}
+          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-1"
+          title="Supprimer"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function Nomenclature() {
@@ -282,41 +370,18 @@ export default function Nomenclature() {
               )}
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {seFiltres.map((se) => {
-                const isSelected = selectionne?.id === se.id
-                return (
-                  <button key={se.id} onClick={() => setSelectionne(se)} className="w-full text-left">
-                    <div className={`flex rounded-xl overflow-hidden border transition-colors ${
-                      isSelected ? 'border-primary-200' : 'border-primary-100 hover:border-primary-200'
-                    }`}>
-                      <div
-                        className="w-[3px] flex-shrink-0 transition-colors"
-                        style={{ backgroundColor: isSelected ? '#074750' : 'transparent' }}
-                      />
-                      <div className={`flex-1 flex items-center gap-2 px-3.5 py-2.5 transition-colors ${isSelected ? 'bg-primary-50' : 'bg-white'}`}>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${isSelected ? 'text-primary-900' : 'text-primary-700'}`}>
-                            {se.nom}
-                          </p>
-                          {se.description && (
-                            <p className="text-xs text-primary-500 truncate mt-0.5">{se.description}</p>
-                          )}
-                        </div>
-                        {se.photo_url && (
-                          <img
-                            src={se.photo_url}
-                            alt=""
-                            className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => setPhotoLightbox(se.photo_url!)}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+            <AnimatedList maxHeightClass="max-h-[70vh]" className="space-y-1.5">
+              {seFiltres.map((se, index) => (
+                <SeListItem
+                  key={se.id}
+                  se={se}
+                  index={index}
+                  isSelected={selectionne?.id === se.id}
+                  onSelect={() => setSelectionne(se)}
+                  onPhoto={setPhotoLightbox}
+                />
+              ))}
+            </AnimatedList>
           )}
         </div>
 
@@ -392,45 +457,8 @@ export default function Nomenclature() {
               ) : (() => {
                 const sousEnsemblesComp = composants.filter((c) => c.type === 'sous_ensemble')
                 const piecesComp = composants.filter((c) => c.type === 'piece')
-                const renderLigne = (comp: ComposantLigne) => (
-                  <div key={comp.id} className="flex rounded-xl overflow-hidden border border-primary-100">
-                    <div
-                      className="w-[3px] flex-shrink-0"
-                      style={{ backgroundColor: comp.type === 'piece' ? '#22B84F' : '#F97316' }}
-                    />
-                    <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
-                      {comp.photo_url ? (
-                        <img src={comp.photo_url} alt={comp.nom} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPhotoLightbox(comp.photo_url!)} />
-                      ) : (
-                        <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0 border border-primary-100">
-                          {comp.type === 'piece'
-                            ? <Wrench size={13} className="text-primary-400" />
-                            : <Layers size={13} className="text-alert-400" />
-                          }
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-primary-900 truncate">{comp.nom}</p>
-                        {comp.type === 'piece' && comp.description
-                          ? <p className="text-xs text-primary-400 truncate">{comp.description}</p>
-                          : <p className="text-xs text-primary-500">{comp.type === 'piece' ? 'Pièce' : 'Sous-ensemble'}</p>
-                        }
-                      </div>
-                      <span className="text-sm font-bold tabular-nums text-primary-700 flex-shrink-0">
-                        ×{comp.quantite_requise}
-                      </span>
-                      <button
-                        onClick={() => supprimerComposant(comp.id)}
-                        className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-1"
-                        title="Supprimer"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </div>
-                )
                 return (
-                  <div className="space-y-4">
+                  <AnimatedList maxHeightClass="max-h-[60vh]" className="space-y-4 pr-1">
                     {sousEnsemblesComp.length > 0 && (
                       <div>
                         <div className="flex items-center gap-3 mb-2">
@@ -441,7 +469,9 @@ export default function Nomenclature() {
                           <span className="text-xs font-semibold text-primary-600 tabular-nums">{sousEnsemblesComp.length}</span>
                         </div>
                         <div className="space-y-1.5">
-                          {sousEnsemblesComp.map(renderLigne)}
+                          {sousEnsemblesComp.map((comp, i) => (
+                            <ComposantCard key={comp.id} comp={comp} index={i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} />
+                          ))}
                         </div>
                       </div>
                     )}
@@ -455,11 +485,13 @@ export default function Nomenclature() {
                           <span className="text-xs font-semibold text-primary-600 tabular-nums">{piecesComp.length}</span>
                         </div>
                         <div className="space-y-1.5">
-                          {piecesComp.map(renderLigne)}
+                          {piecesComp.map((comp, i) => (
+                            <ComposantCard key={comp.id} comp={comp} index={sousEnsemblesComp.length + i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} />
+                          ))}
                         </div>
                       </div>
                     )}
-                  </div>
+                  </AnimatedList>
                 )
               })()}
             </>

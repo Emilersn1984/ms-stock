@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Search, Check, ClipboardList, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import AnimatedList from '../components/AnimatedList'
+import { useAnimatedListItem } from '../hooks/useAnimatedListItem'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { recalculerStock } from '../utils/recalculerStock'
 import { TypeOperation } from '../types'
@@ -50,6 +52,102 @@ function formatDate(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function OperationRow({ op, index, onModifier }: {
+  op: OperationComplete
+  index: number
+  onModifier: (op: OperationComplete) => void
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLTableRowElement>(index)
+  return (
+    <tr ref={ref} style={style} className="hover:bg-primary-50 transition-colors">
+      <td
+        className="border-l-4 px-4 py-3.5 text-xs text-primary-500 whitespace-nowrap"
+        style={{ borderLeftColor: TYPE_BAR_HEX[op.type] }}
+      >
+        {formatDate(op.created_at)}
+      </td>
+      <td className="px-5 py-3.5">
+        <span className={`text-xs font-bold uppercase tracking-wide ${TYPE_TEXT_CLASS[op.type]}`}>
+          {TYPE_LABELS[op.type]}
+        </span>
+      </td>
+      <td className="px-5 py-3.5 font-medium text-primary-900">
+        {op.pieces?.nom ?? op.sous_ensembles?.nom ?? '—'}
+      </td>
+      <td className="px-5 py-3.5 text-xs text-primary-500 whitespace-nowrap">
+        {op.utilisateurs ? `${op.utilisateurs.prenom} ${op.utilisateurs.nom}` : '—'}
+      </td>
+      <td className="px-5 py-3.5 text-right font-bold tabular-nums">
+        {op.delta != null ? (
+          <span className={op.delta >= 0 ? 'text-success-600' : 'text-danger-600'}>
+            {op.delta >= 0 ? '+' : ''}{op.delta}
+          </span>
+        ) : '—'}
+      </td>
+      <td className="px-5 py-3.5 text-right font-bold tabular-nums text-primary-700">
+        {op.quantite_apres ?? '—'}
+      </td>
+      <td className="px-5 py-3.5 text-xs text-primary-400 max-w-[180px] truncate">
+        {op.commentaire ?? ''}
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        <button
+          onClick={() => onModifier(op)}
+          className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors"
+        >
+          Modifier
+        </button>
+      </td>
+    </tr>
+  )
+}
+
+function OperationCard({ op, index, onModifier }: {
+  op: OperationComplete
+  index: number
+  onModifier: (op: OperationComplete) => void
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
+  return (
+    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
+      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: TYPE_BAR_HEX[op.type] }} />
+      <div className="flex-1 px-3.5 py-2.5 bg-white min-w-0">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex-1 min-w-0">
+            <span className={`text-[10px] font-bold uppercase tracking-wide ${TYPE_TEXT_CLASS[op.type]}`}>
+              {TYPE_LABELS[op.type]}
+            </span>
+            <p className="text-sm font-medium text-primary-900 truncate mt-0.5">
+              {op.pieces?.nom ?? op.sous_ensembles?.nom ?? '—'}
+            </p>
+          </div>
+          {op.delta != null && (
+            <span className={`text-base font-bold tabular-nums flex-shrink-0 ${op.delta >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
+              {op.delta >= 0 ? '+' : ''}{op.delta}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-primary-400 tabular-nums">
+              {op.utilisateurs ? `${op.utilisateurs.prenom} ${op.utilisateurs.nom}` : '—'} · {formatDate(op.created_at)}
+            </p>
+            {op.commentaire && (
+              <p className="text-xs text-primary-400 mt-0.5 truncate">{op.commentaire}</p>
+            )}
+          </div>
+          <button
+            onClick={() => onModifier(op)}
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-800 hover:bg-primary-50 transition-colors ml-2"
+          >
+            <Pencil size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function Historique() {
@@ -312,107 +410,35 @@ export default function Historique() {
         <>
           {/* Tableau desktop */}
           <div className="hidden md:block bg-white rounded-2xl border border-primary-100 overflow-hidden mb-2">
-            <table className="w-full text-sm">
-              <thead className="bg-primary-50 border-b border-primary-100">
-                <tr>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Date</th>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Type</th>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce / SE</th>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Opérateur</th>
-                  <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Delta</th>
-                  <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Stock après</th>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Commentaire</th>
-                  <th className="px-5 py-3.5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-primary-50">
-                {operationsFiltrees.map((op) => (
-                  <tr key={op.id} className="hover:bg-primary-50 transition-colors">
-                    <td
-                      className="border-l-4 px-4 py-3.5 text-xs text-primary-500 whitespace-nowrap"
-                      style={{ borderLeftColor: TYPE_BAR_HEX[op.type] }}
-                    >
-                      {formatDate(op.created_at)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`text-xs font-bold uppercase tracking-wide ${TYPE_TEXT_CLASS[op.type]}`}>
-                        {TYPE_LABELS[op.type]}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 font-medium text-primary-900">
-                      {op.pieces?.nom ?? op.sous_ensembles?.nom ?? '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-primary-500 whitespace-nowrap">
-                      {op.utilisateurs ? `${op.utilisateurs.prenom} ${op.utilisateurs.nom}` : '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-bold tabular-nums">
-                      {op.delta != null ? (
-                        <span className={op.delta >= 0 ? 'text-success-600' : 'text-danger-600'}>
-                          {op.delta >= 0 ? '+' : ''}{op.delta}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-bold tabular-nums text-primary-700">
-                      {op.quantite_apres ?? '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-primary-400 max-w-[180px] truncate">
-                      {op.commentaire ?? ''}
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <button
-                        onClick={() => ouvrirModal(op)}
-                        className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors"
-                      >
-                        Modifier
-                      </button>
-                    </td>
+            <AnimatedList maxHeightClass="max-h-[60vh]" fadeColor="#FFFFFF">
+              <table className="w-full text-sm">
+                <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
+                  <tr>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Date</th>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Type</th>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce / SE</th>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Opérateur</th>
+                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Delta</th>
+                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Stock après</th>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Commentaire</th>
+                    <th className="px-5 py-3.5" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-primary-50">
+                  {operationsFiltrees.map((op, i) => (
+                    <OperationRow key={op.id} op={op} index={i} onModifier={ouvrirModal} />
+                  ))}
+                </tbody>
+              </table>
+            </AnimatedList>
           </div>
 
           {/* Cartes mobile */}
-          <div className="md:hidden space-y-1.5">
-            {operationsFiltrees.map((op) => (
-              <div key={op.id} className="flex rounded-xl overflow-hidden border border-primary-100">
-                <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: TYPE_BAR_HEX[op.type] }} />
-                <div className="flex-1 px-3.5 py-2.5 bg-white min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-[10px] font-bold uppercase tracking-wide ${TYPE_TEXT_CLASS[op.type]}`}>
-                        {TYPE_LABELS[op.type]}
-                      </span>
-                      <p className="text-sm font-medium text-primary-900 truncate mt-0.5">
-                        {op.pieces?.nom ?? op.sous_ensembles?.nom ?? '—'}
-                      </p>
-                    </div>
-                    {op.delta != null && (
-                      <span className={`text-base font-bold tabular-nums flex-shrink-0 ${op.delta >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
-                        {op.delta >= 0 ? '+' : ''}{op.delta}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] text-primary-400 tabular-nums">
-                        {op.utilisateurs ? `${op.utilisateurs.prenom} ${op.utilisateurs.nom}` : '—'} · {formatDate(op.created_at)}
-                      </p>
-                      {op.commentaire && (
-                        <p className="text-xs text-primary-400 mt-0.5 truncate">{op.commentaire}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => ouvrirModal(op)}
-                      className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-800 hover:bg-primary-50 transition-colors ml-2"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
+          <AnimatedList maxHeightClass="max-h-[60vh]" className="md:hidden space-y-1.5">
+            {operationsFiltrees.map((op, i) => (
+              <OperationCard key={op.id} op={op} index={i} onModifier={ouvrirModal} />
             ))}
-          </div>
+          </AnimatedList>
         </>
       )}
 

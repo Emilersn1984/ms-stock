@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ChevronDown, Search, Plus, Pencil } from 'lucide-react'
 import PhotoLightbox from '../components/PhotoLightbox'
+import AnimatedList from '../components/AnimatedList'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
+import { useAnimatedListItem } from '../hooks/useAnimatedListItem'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { getCouleurSeuil, COULEUR_LABEL } from '../utils/couleurSeuil'
 import ModalModifierQuantite from '../components/ModalModifierQuantite'
@@ -27,6 +29,171 @@ function SectionLabel({ texte, count, accent }: { texte: string; count?: string;
       <span className={`text-[10px] font-bold uppercase tracking-[0.18em] whitespace-nowrap ${accent ?? 'text-primary-700'}`}>{texte}</span>
       <div className="flex-1 h-px bg-primary-100" />
       {count !== undefined && <span className="text-xs font-semibold text-primary-600 tabular-nums">{count}</span>}
+    </div>
+  )
+}
+
+function SeRow({ se, index, onCorriger, onPhoto, canEdit }: {
+  se: SousEnsemble
+  index: number
+  onCorriger: (se: SousEnsemble) => void
+  onPhoto: (url: string) => void
+  canEdit: boolean
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLTableRowElement>(index)
+  return (
+    <tr ref={ref} style={style} className="hover:bg-primary-50 transition-colors">
+      <td className="border-l-4 px-4 py-3.5" style={{ borderLeftColor: '#22B84F' }}>
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="min-w-0">
+            <p className="font-medium text-primary-900">{se.nom}</p>
+            {se.description && <p className="text-xs text-primary-500 mt-0.5 truncate max-w-xs">{se.description}</p>}
+          </div>
+          {se.photo_url && (
+            <img src={se.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(se.photo_url!)} />
+          )}
+        </div>
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        <span className="text-xl font-bold tabular-nums text-success-600">{se.quantite}</span>
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        {canEdit && (
+          <button onClick={() => onCorriger(se)} className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors">
+            Corriger
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+function SeCard({ se, index, onCorriger, onPhoto, canEdit }: {
+  se: SousEnsemble
+  index: number
+  onCorriger: (se: SousEnsemble) => void
+  onPhoto: (url: string) => void
+  canEdit: boolean
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
+  return (
+    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
+      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: '#22B84F' }} />
+      <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
+          {se.description && <p className="text-xs text-primary-500 mt-0.5 truncate">{se.description}</p>}
+        </div>
+        {se.photo_url && (
+          <img src={se.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(se.photo_url!)} />
+        )}
+        <div className="flex-shrink-0 text-right">
+          <p className="text-xl font-bold tabular-nums text-success-600 leading-tight">{se.quantite}</p>
+          <p className="text-[10px] uppercase tracking-wide font-bold text-success-600">assemblé{se.quantite !== 1 ? 's' : ''}</p>
+        </div>
+        {canEdit && (
+          <button onClick={() => onCorriger(se)} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1" title="Corriger le stock">
+            <Pencil size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
+  piece: Piece
+  index: number
+  onModifier: (piece: Piece) => void
+  onPhoto: (url: string) => void
+  canEdit: boolean
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLTableRowElement>(index)
+  const couleur = getCouleurSeuil(piece)
+  return (
+    <tr ref={ref} style={style} className="hover:bg-primary-50 transition-colors">
+      <td className="border-l-4 px-4 py-3.5" style={{ borderLeftColor: ACCENT_HEX[couleur] }}>
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="min-w-0">
+            <span className="font-medium text-primary-900">{piece.nom}</span>
+            {piece.description && (
+              <p className="text-xs text-primary-400 mt-0.5 truncate max-w-xs">{piece.description}</p>
+            )}
+          </div>
+          {piece.photo_url && (
+            <img src={piece.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(piece.photo_url!)} />
+          )}
+        </div>
+      </td>
+      <td className="px-5 py-3.5">
+        {piece.categorie
+          ? <span className="text-xs text-primary-500">{piece.categorie}</span>
+          : <span className="text-primary-300">—</span>}
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        <span className={`text-xl font-bold tabular-nums ${QTY_CLASS[couleur]}`}>{piece.quantite}</span>
+      </td>
+      <td className="px-5 py-3.5 text-center">
+        {piece.delai_appro != null ? (
+          <span className="text-xs font-semibold text-primary-600 bg-primary-50 border border-primary-100 rounded-full px-2.5 py-1 whitespace-nowrap">
+            {piece.delai_appro} sem.
+          </span>
+        ) : (
+          <span className="text-primary-300">—</span>
+        )}
+      </td>
+      <td className="px-5 py-3.5 text-center">
+        <span className={`text-xs font-bold uppercase tracking-wide ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</span>
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        {canEdit && (
+          <button onClick={() => onModifier(piece)} className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors">
+            Modifier
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+function PieceCard({ piece, index, onModifier, onPhoto, canEdit }: {
+  piece: Piece
+  index: number
+  onModifier: (piece: Piece) => void
+  onPhoto: (url: string) => void
+  canEdit: boolean
+}) {
+  const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
+  const couleur = getCouleurSeuil(piece)
+  return (
+    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
+      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: ACCENT_HEX[couleur] }} />
+      <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-primary-900 truncate">{piece.nom}</p>
+          {piece.description && <p className="text-xs text-primary-400 mt-0.5 truncate">{piece.description}</p>}
+          {piece.categorie && <p className="text-xs text-primary-500 mt-0.5">{piece.categorie}</p>}
+        </div>
+        {piece.photo_url && (
+          <img src={piece.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(piece.photo_url!)} />
+        )}
+        <div className="flex-shrink-0 text-right">
+          <div className="flex items-center justify-end gap-1.5">
+            <p className={`text-xl font-bold tabular-nums leading-tight ${QTY_CLASS[couleur]}`}>{piece.quantite}</p>
+            {piece.delai_appro != null && (
+              <span className="text-xs font-semibold text-primary-600 bg-primary-50 border border-primary-100 rounded-full px-2 py-0.5 whitespace-nowrap">
+                {piece.delai_appro} sem.
+              </span>
+            )}
+          </div>
+          <p className={`text-[10px] uppercase tracking-wide font-bold ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</p>
+        </div>
+        {canEdit && (
+          <button onClick={() => onModifier(piece)} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1" title="Modifier la quantité">
+            <Pencil size={14} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -170,77 +337,44 @@ export default function Stock() {
 
           {/* Desktop */}
           <div className="hidden md:block bg-white rounded-2xl border border-primary-100 overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-primary-50 border-b border-primary-100">
-                <tr>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Sous-ensemble</th>
-                  <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
-                  <th className="px-5 py-3.5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-primary-50">
-                {sousEnsemblesEnStock.map((se) => (
-                  <tr key={se.id} className="hover:bg-primary-50 transition-colors">
-                    <td className="border-l-4 px-4 py-3.5" style={{ borderLeftColor: '#22B84F' }}>
-                      <div className="flex items-center justify-between gap-2.5">
-                        <div className="min-w-0">
-                          <p className="font-medium text-primary-900">{se.nom}</p>
-                          {se.description && <p className="text-xs text-primary-500 mt-0.5 truncate max-w-xs">{se.description}</p>}
-                        </div>
-                        {se.photo_url && (
-                          <img src={se.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPhotoLightbox(se.photo_url!)} />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <span className="text-xl font-bold tabular-nums text-success-600">{se.quantite}</span>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      {utilisateur && (
-                        <button
-                          onClick={() => setSeAModifier(se)}
-                          className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors"
-                        >
-                          Corriger
-                        </button>
-                      )}
-                    </td>
+            <AnimatedList maxHeightClass="max-h-[40vh]" fadeColor="#FFFFFF">
+              <table className="w-full">
+                <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
+                  <tr>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Sous-ensemble</th>
+                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
+                    <th className="px-5 py-3.5" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-primary-50">
+                  {sousEnsemblesEnStock.map((se, i) => (
+                    <SeRow
+                      key={se.id}
+                      se={se}
+                      index={i}
+                      canEdit={!!utilisateur}
+                      onCorriger={(s) => setSeAModifier(s)}
+                      onPhoto={(url) => setPhotoLightbox(url)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </AnimatedList>
           </div>
 
           {/* Mobile */}
-          <div className="md:hidden space-y-1.5">
-            {sousEnsemblesEnStock.map((se) => (
-              <div key={se.id} className="flex rounded-xl overflow-hidden border border-primary-100">
-                <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: '#22B84F' }} />
-                <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
-                    {se.description && <p className="text-xs text-primary-500 mt-0.5 truncate">{se.description}</p>}
-                  </div>
-                  {se.photo_url && (
-                    <img src={se.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPhotoLightbox(se.photo_url!)} />
-                  )}
-                  <div className="flex-shrink-0 text-right">
-                    <p className="text-xl font-bold tabular-nums text-success-600 leading-tight">{se.quantite}</p>
-                    <p className="text-[10px] uppercase tracking-wide font-bold text-success-600">assemblé{se.quantite !== 1 ? 's' : ''}</p>
-                  </div>
-                  {utilisateur && (
-                    <button
-                      onClick={() => setSeAModifier(se)}
-                      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1"
-                      title="Corriger le stock"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
+          <AnimatedList maxHeightClass="max-h-[40vh]" className="md:hidden space-y-1.5">
+            {sousEnsemblesEnStock.map((se, i) => (
+              <SeCard
+                key={se.id}
+                se={se}
+                index={i}
+                canEdit={!!utilisateur}
+                onCorriger={(s) => setSeAModifier(s)}
+                onPhoto={(url) => setPhotoLightbox(url)}
+              />
             ))}
-          </div>
+          </AnimatedList>
         </div>
       )}
 
@@ -376,116 +510,47 @@ export default function Stock() {
       {piecesFiltrees.length > 0 && (
         <>
           <div className="hidden md:block bg-white rounded-2xl border border-primary-100 overflow-hidden mb-2">
-            <table className="w-full">
-              <thead className="bg-primary-50 border-b border-primary-100">
-                <tr>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce</th>
-                  <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Catégorie</th>
-                  <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
-                  <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Délai appro</th>
-                  <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Statut</th>
-                  <th className="px-5 py-3.5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-primary-50">
-                {piecesFiltrees.map((piece) => {
-                  const couleur = getCouleurSeuil(piece)
-                  return (
-                    <tr key={piece.id} className="hover:bg-primary-50 transition-colors">
-                      <td
-                        className="border-l-4 px-4 py-3.5"
-                        style={{ borderLeftColor: ACCENT_HEX[couleur] }}
-                      >
-                        <div className="flex items-center justify-between gap-2.5">
-                          <div className="min-w-0">
-                            <span className="font-medium text-primary-900">{piece.nom}</span>
-                            {piece.description && (
-                              <p className="text-xs text-primary-400 mt-0.5 truncate max-w-xs">{piece.description}</p>
-                            )}
-                          </div>
-                          {piece.photo_url && (
-                            <img src={piece.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPhotoLightbox(piece.photo_url!)} />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {piece.categorie
-                          ? <span className="text-xs text-primary-500">{piece.categorie}</span>
-                          : <span className="text-primary-300">—</span>}
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <span className={`text-xl font-bold tabular-nums ${QTY_CLASS[couleur]}`}>{piece.quantite}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        {piece.delai_appro != null ? (
-                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 border border-primary-100 rounded-full px-2.5 py-1 whitespace-nowrap">
-                            {piece.delai_appro} sem.
-                          </span>
-                        ) : (
-                          <span className="text-primary-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className={`text-xs font-bold uppercase tracking-wide ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        {utilisateur && (
-                          <button
-                            onClick={() => setPieceAModifier(piece)}
-                            className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors"
-                          >
-                            Modifier
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <AnimatedList maxHeightClass="max-h-[55vh]" fadeColor="#FFFFFF">
+              <table className="w-full">
+                <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
+                  <tr>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce</th>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Catégorie</th>
+                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
+                    <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Délai appro</th>
+                    <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Statut</th>
+                    <th className="px-5 py-3.5" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary-50">
+                  {piecesFiltrees.map((piece, i) => (
+                    <PieceRow
+                      key={piece.id}
+                      piece={piece}
+                      index={i}
+                      canEdit={!!utilisateur}
+                      onModifier={(p) => setPieceAModifier(p)}
+                      onPhoto={(url) => setPhotoLightbox(url)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </AnimatedList>
           </div>
 
           {/* Cartes mobile */}
-          <div className="md:hidden space-y-1.5">
-            {piecesFiltrees.map((piece) => {
-              const couleur = getCouleurSeuil(piece)
-              return (
-                <div key={piece.id} className="flex rounded-xl overflow-hidden border border-primary-100">
-                  <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: ACCENT_HEX[couleur] }} />
-                  <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-primary-900 truncate">{piece.nom}</p>
-                      {piece.description && <p className="text-xs text-primary-400 mt-0.5 truncate">{piece.description}</p>}
-                      {piece.categorie && <p className="text-xs text-primary-500 mt-0.5">{piece.categorie}</p>}
-                    </div>
-                    {piece.photo_url && (
-                      <img src={piece.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPhotoLightbox(piece.photo_url!)} />
-                    )}
-                    <div className="flex-shrink-0 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <p className={`text-xl font-bold tabular-nums leading-tight ${QTY_CLASS[couleur]}`}>{piece.quantite}</p>
-                        {piece.delai_appro != null && (
-                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 border border-primary-100 rounded-full px-2 py-0.5 whitespace-nowrap">
-                            {piece.delai_appro} sem.
-                          </span>
-                        )}
-                      </div>
-                      <p className={`text-[10px] uppercase tracking-wide font-bold ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</p>
-                    </div>
-                    {utilisateur && (
-                      <button
-                        onClick={() => setPieceAModifier(piece)}
-                        className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1"
-                        title="Modifier la quantité"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <AnimatedList maxHeightClass="max-h-[55vh]" className="md:hidden space-y-1.5">
+            {piecesFiltrees.map((piece, i) => (
+              <PieceCard
+                key={piece.id}
+                piece={piece}
+                index={i}
+                canEdit={!!utilisateur}
+                onModifier={(p) => setPieceAModifier(p)}
+                onPhoto={(url) => setPhotoLightbox(url)}
+              />
+            ))}
+          </AnimatedList>
         </>
       )}
 

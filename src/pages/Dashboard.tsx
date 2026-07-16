@@ -72,6 +72,16 @@ function SectionLabel({ texte, accent, count }: { texte: string; accent?: string
   )
 }
 
+// ─── Bento card ────────────────────────────────────────────────────────────────
+
+function BentoCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-white rounded-2xl border border-primary-100 p-5 flex flex-col min-h-0 ${className}`}>
+      {children}
+    </div>
+  )
+}
+
 // ─── Alert item ────────────────────────────────────────────────────────────────
 
 function AlerteItem({ alerte, onResoudre }: { alerte: AlerteManuelle; onResoudre: () => void }) {
@@ -301,29 +311,30 @@ export default function Dashboard() {
             alertes={alertes.length}
           />
 
-          {/* Corps — 2 colonnes desktop */}
-          <div className="grid md:grid-cols-2 gap-8 mb-10">
-
-            {/* Colonne gauche — Alertes manuelles */}
-            <div>
-              <SectionLabel
-                texte="Alertes manuelles"
-                count={alertes.length}
-                accent={alertes.length > 0 ? 'text-alert-500' : 'text-primary-400'}
-              />
-              {alertes.length === 0 ? (
-                <EtatVide texte="Aucune alerte manuelle active" />
-              ) : (
-                <div className="space-y-2">
-                  {alertes.map((a) => (
-                    <AlerteItem key={a.id} alerte={a} onResoudre={() => resoudreAlerte(a.id)} />
-                  ))}
+          {/* Paquet 1 — Sous-ensembles disponibles (juste sous le bandeau KPI) */}
+          <BentoCard className="mb-6">
+            <SectionLabel
+              texte="Sous-ensembles disponibles"
+              count={`${sousEnsembles.filter((se) => se.quantite > 0).length} / ${sousEnsembles.length}`}
+            />
+            {sousEnsembles.length === 0 ? (
+              <EtatVide texte="Aucun sous-ensemble défini" />
+            ) : (
+              <div className="overflow-y-auto max-h-[260px] pr-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {[...sousEnsembles]
+                    .sort((a, b) => b.quantite - a.quantite)
+                    .map((se) => <SousEnsembleCard key={se.id} se={se} />)}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </BentoCard>
 
-            {/* Colonne droite — Achats recommandés */}
-            <div>
+          {/* Grille bento — achats recommandés et impressions 3D côte à côte */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+
+            {/* Paquet 2 — Achats recommandés (réduit) */}
+            <BentoCard>
               <SectionLabel
                 texte="Achats recommandés"
                 count={achatsRecommandes.length}
@@ -341,51 +352,52 @@ export default function Dashboard() {
                     : 'Aucun achat requis — tous les stocks sont suffisants'
                 } />
               ) : (
-                <div className="space-y-1.5">
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 max-h-[280px]">
                   {achatsRecommandes.map((a) => (
                     <AchatRow key={a.piece.id} achat={a} />
                   ))}
                 </div>
               )}
-            </div>
-          </div>
+            </BentoCard>
 
-          {/* File d'impression 3D */}
-          <div className="mb-10">
-            <SectionLabel
-              texte="File d'impression 3D"
-              count={impressions3D.length}
-              accent={impressions3D.length > 0 ? 'text-alert-500' : 'text-primary-400'}
-            />
-            <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide mb-3">
-              Pièces produites en interne — triées par urgence selon le temps d'impression
-            </p>
-            {impressions3D.length === 0 ? (
-              <EtatVide texte="Aucune impression 3D urgente — tous les stocks sont suffisants" />
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-1.5">
-                {impressions3D.map((imp) => (
-                  <ImpressionRow key={imp.piece.id} impression={imp} />
-                ))}
-              </div>
-            )}
-          </div>
+            {/* Paquet 3 — File d'impression 3D (à côté des achats) */}
+            <BentoCard>
+              <SectionLabel
+                texte="File d'impression 3D"
+                count={impressions3D.length}
+                accent={impressions3D.length > 0 ? 'text-alert-500' : 'text-primary-400'}
+              />
+              <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide mb-3">
+                Pièces produites en interne — triées par urgence
+              </p>
+              {impressions3D.length === 0 ? (
+                <EtatVide texte="Aucune impression 3D urgente — tous les stocks sont suffisants" />
+              ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 max-h-[280px]">
+                  {impressions3D.map((imp) => (
+                    <ImpressionRow key={imp.piece.id} impression={imp} />
+                  ))}
+                </div>
+              )}
+            </BentoCard>
 
-          {/* Sous-ensembles */}
-          <div>
-            <SectionLabel
-              texte="Sous-ensembles disponibles"
-              count={`${sousEnsembles.filter((se) => se.quantite > 0).length} / ${sousEnsembles.length}`}
-            />
-            {sousEnsembles.length === 0 ? (
-              <EtatVide texte="Aucun sous-ensemble défini" />
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {[...sousEnsembles]
-                  .sort((a, b) => b.quantite - a.quantite)
-                  .map((se) => <SousEnsembleCard key={se.id} se={se} />)}
-              </div>
-            )}
+            {/* Paquet 4 — Alertes manuelles */}
+            <BentoCard>
+              <SectionLabel
+                texte="Alertes manuelles"
+                count={alertes.length}
+                accent={alertes.length > 0 ? 'text-alert-500' : 'text-primary-400'}
+              />
+              {alertes.length === 0 ? (
+                <EtatVide texte="Aucune alerte manuelle active" />
+              ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 max-h-[280px]">
+                  {alertes.map((a) => (
+                    <AlerteItem key={a.id} alerte={a} onResoudre={() => resoudreAlerte(a.id)} />
+                  ))}
+                </div>
+              )}
+            </BentoCard>
           </div>
         </>
       )}

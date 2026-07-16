@@ -27,12 +27,12 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
+    <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
       <Header utilisateur={utilisateur} onDeconnecter={deconnecter} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar desktop */}
-        <aside className="hidden md:flex flex-col w-56 bg-white border-r border-primary-100 py-4 px-3 gap-1 flex-shrink-0">
+        <aside className="hidden md:flex flex-col w-56 bg-white border-r border-primary-100 py-4 px-3 gap-1 flex-shrink-0 overflow-y-auto">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
