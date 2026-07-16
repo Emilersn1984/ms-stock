@@ -8,10 +8,16 @@ import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
 import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
 import { calcImpressions3DRecommandees } from '../utils/calcImpressions3D'
 import type { Impression3DRecommandee } from '../utils/calcImpressions3D'
+import { calcMaxFabricableDetail } from '../utils/calcDisponibilite'
 import { supabase } from '../lib/supabase'
-import type { SousEnsemble, AlerteManuelle } from '../types'
+import type { SousEnsemble, AlerteManuelle, Piece } from '../types'
 
-type NomEntry = { piece_id: string; sous_ensemble_id: string; quantite_requise: number }
+type NomEntry = {
+  piece_id: string | null
+  sous_ensemble_id: string
+  sous_ensemble_enfant_id: string | null
+  quantite_requise: number
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,12 +37,16 @@ function formatDateAlerte(dateStr: string) {
 // ─── KPI Strip ─────────────────────────────────────────────────────────────────
 
 function KpiStrip({
-  total, productionHebdo, aCommander, aImprimer, alertes, simulationActive, onChangeProduction, onResetProduction,
+  productionHebdo, simulationActive, onChangeProduction, onResetProduction,
+  boueesFabricables, pieceLimitante, semainesAutonomie,
 }: {
-  total: number; productionHebdo: number; aCommander: number; aImprimer: number; alertes: number
+  productionHebdo: number
   simulationActive: boolean
   onChangeProduction: (val: number) => void
   onResetProduction: () => void
+  boueesFabricables: number
+  pieceLimitante: Piece | null
+  semainesAutonomie: number | null
 }) {
   const [editing, setEditing] = useState(false)
   const [valeur, setValeur] = useState(String(productionHebdo))
@@ -55,19 +65,22 @@ function KpiStrip({
     setEditing(false)
   }
 
-  const metrics = [
-    { val: aCommander, label: 'Pièces à commander', accent: aCommander > 0 ? 'text-danger-400' : 'text-success-300' },
-    { val: aImprimer,  label: 'Impressions 3D',      accent: aImprimer > 0 ? 'text-alert-400' : 'text-success-300' },
-    { val: alertes,    label: 'Alertes actives',     accent: alertes > 0 ? 'text-alert-400' : 'text-success-300' },
-  ]
+  const fabricableAccent = boueesFabricables === 0
+    ? 'text-danger-400'
+    : boueesFabricables < productionHebdo
+      ? 'text-alert-400'
+      : 'text-success-300'
+
+  const autonomieAccent = semainesAutonomie === null
+    ? 'text-primary-400'
+    : semainesAutonomie < 1
+      ? 'text-danger-400'
+      : semainesAutonomie < 2
+        ? 'text-alert-400'
+        : 'text-success-300'
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 bg-primary-900 rounded-2xl overflow-hidden mb-8">
-      <div className="px-6 py-5 flex flex-col gap-1.5">
-        <span className="text-5xl font-bold leading-none tracking-tight tabular-nums text-white">{total}</span>
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">Pièces actives</span>
-      </div>
-
+    <div className="grid grid-cols-1 sm:grid-cols-3 bg-primary-900 rounded-2xl overflow-hidden mb-8">
       <div className="px-6 py-5 flex flex-col gap-1.5 relative">
         {editing ? (
           <input
@@ -115,16 +128,28 @@ function KpiStrip({
         )}
       </div>
 
-      {metrics.map((m, i) => (
-        <div key={i} className="px-6 py-5 flex flex-col gap-1.5">
-          <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${m.accent}`}>
-            {m.val}
+      <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
+        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${fabricableAccent}`}>
+          {boueesFabricables}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+          Bouées fabricables (stock actuel)
+        </span>
+        {pieceLimitante && (
+          <span className="text-[10px] text-primary-300 truncate">
+            Limité par : <span className="font-semibold text-primary-100">{pieceLimitante.nom}</span>
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
-            {m.label}
-          </span>
-        </div>
-      ))}
+        )}
+      </div>
+
+      <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
+        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${autonomieAccent}`}>
+          {semainesAutonomie === null ? '—' : semainesAutonomie.toFixed(1)}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+          Semaines d'autonomie
+        </span>
+      </div>
     </div>
   )
 }
@@ -312,7 +337,7 @@ export default function Dashboard() {
     async function charger() {
       const [{ data: seData }, { data: nomData }] = await Promise.all([
         supabase.from('sous_ensembles').select('*').order('nom'),
-        supabase.from('nomenclature').select('piece_id, sous_ensemble_id, quantite_requise').not('piece_id', 'is', null),
+        supabase.from('nomenclature').select('piece_id, sous_ensemble_id, sous_ensemble_enfant_id, quantite_requise'),
       ])
       setSousEnsembles((seData as SousEnsemble[]) ?? [])
       setNomenclature((nomData as NomEntry[]) ?? [])
@@ -337,15 +362,27 @@ export default function Dashboard() {
 
   const productionHebdoAffichee = simulationBouees ?? totalHebdo
 
+  const nomenclaturePieces = useMemo(
+    () => nomenclature.filter((n): n is NomEntry & { piece_id: string } => n.piece_id !== null),
+    [nomenclature]
+  )
+
   const achatsRecommandes = useMemo(
-    () => calcAchatsRecommandes(pieces, nomenclature, consommationEffective),
-    [pieces, nomenclature, consommationEffective]
+    () => calcAchatsRecommandes(pieces, nomenclaturePieces, consommationEffective),
+    [pieces, nomenclaturePieces, consommationEffective]
   )
 
   const impressions3D = useMemo(
-    () => calcImpressions3DRecommandees(pieces, nomenclature, consommationEffective),
-    [pieces, nomenclature, consommationEffective]
+    () => calcImpressions3DRecommandees(pieces, nomenclaturePieces, consommationEffective),
+    [pieces, nomenclaturePieces, consommationEffective]
   )
+
+  const { max: boueesFabricables, pieceLimitante } = useMemo(
+    () => (boueeMecaId ? calcMaxFabricableDetail(boueeMecaId, pieces, nomenclature) : { max: 0, pieceLimitante: null }),
+    [boueeMecaId, pieces, nomenclature]
+  )
+
+  const semainesAutonomie = productionHebdoAffichee > 0 ? boueesFabricables / productionHebdoAffichee : null
 
   const conso3DActive = consommationEffective.some((c) => c.quantite > 0)
 
@@ -395,14 +432,13 @@ export default function Dashboard() {
         <>
           {/* KPI strip */}
           <KpiStrip
-            total={pieces.length}
             productionHebdo={productionHebdoAffichee}
-            aCommander={achatsRecommandes.length}
-            aImprimer={impressions3D.length}
-            alertes={alertes.length}
             simulationActive={simulationBouees !== null}
             onChangeProduction={setSimulationBouees}
             onResetProduction={() => setSimulationBouees(null)}
+            boueesFabricables={boueesFabricables}
+            pieceLimitante={pieceLimitante}
+            semainesAutonomie={semainesAutonomie}
           />
 
           {/* Paquet 1 — Sous-ensembles disponibles (juste sous le bandeau KPI) */}

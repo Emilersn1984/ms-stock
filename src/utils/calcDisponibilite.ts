@@ -40,20 +40,43 @@ export function calcMaxFabricable(
   pieces: Piece[],
   nomenclature: NomenclatureRow[]
 ): number {
+  return calcMaxFabricableDetail(seId, pieces, nomenclature).max
+}
+
+export type MaxFabricableDetail = {
+  max: number
+  pieceLimitante: Piece | null
+}
+
+export function calcMaxFabricableDetail(
+  seId: string,
+  pieces: Piece[],
+  nomenclature: NomenclatureRow[]
+): MaxFabricableDetail {
   const besoin = new Map<string, number>()
   resoudreRecursif(seId, 1, besoin, nomenclature, new Set())
 
-  if (besoin.size === 0) return 0
+  if (besoin.size === 0) return { max: 0, pieceLimitante: null }
 
   const piecesMap = new Map(pieces.map((p) => [p.id, p]))
   let max = Infinity
+  let pieceLimitante: Piece | null = null
 
   for (const [pieceId, quantiteRequise] of besoin) {
     const piece = piecesMap.get(pieceId)
-    if (!piece) return 0
+    if (!piece) return { max: 0, pieceLimitante: null }
+    // Les pièces imprimées en 3D sont produites en interne rapidement :
+    // elles ne doivent pas plafonner le nombre théorique de bouées fabricables.
+    if (piece.est_impression_3d) continue
     const faisable = Math.floor(piece.quantite / quantiteRequise)
-    if (faisable < max) max = faisable
+    if (faisable < max) {
+      max = faisable
+      pieceLimitante = piece
+    }
   }
 
-  return Math.max(0, max === Infinity ? 0 : max)
+  return {
+    max: Math.max(0, max === Infinity ? 0 : max),
+    pieceLimitante: max === Infinity ? null : pieceLimitante,
+  }
 }
