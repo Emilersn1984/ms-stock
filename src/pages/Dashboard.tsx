@@ -31,17 +31,90 @@ function formatDateAlerte(dateStr: string) {
 // ─── KPI Strip ─────────────────────────────────────────────────────────────────
 
 function KpiStrip({
-  total, productionHebdo, aCommander, aImprimer, alertes,
-}: { total: number; productionHebdo: number; aCommander: number; aImprimer: number; alertes: number }) {
+  total, productionHebdo, aCommander, aImprimer, alertes, simulationActive, onChangeProduction, onResetProduction,
+}: {
+  total: number; productionHebdo: number; aCommander: number; aImprimer: number; alertes: number
+  simulationActive: boolean
+  onChangeProduction: (val: number) => void
+  onResetProduction: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [valeur, setValeur] = useState(String(productionHebdo))
+
+  useEffect(() => {
+    if (!editing) setValeur(String(productionHebdo))
+  }, [productionHebdo, editing])
+
+  function valider() {
+    const n = parseInt(valeur, 10)
+    if (!isNaN(n) && n >= 0) {
+      onChangeProduction(n)
+    } else {
+      setValeur(String(productionHebdo))
+    }
+    setEditing(false)
+  }
+
   const metrics = [
-    { val: total,           label: 'Pièces actives',      accent: 'text-white' },
-    { val: productionHebdo, label: 'Bouées méca / semaine', accent: productionHebdo > 0 ? 'text-success-300' : 'text-primary-400' },
-    { val: aCommander,      label: 'Pièces à commander',   accent: aCommander > 0 ? 'text-danger-400'  : 'text-success-300' },
-    { val: aImprimer,       label: 'Impressions 3D',       accent: aImprimer > 0 ? 'text-alert-400' : 'text-success-300' },
-    { val: alertes,         label: 'Alertes actives',      accent: alertes > 0 ? 'text-alert-400' : 'text-success-300' },
+    { val: aCommander, label: 'Pièces à commander', accent: aCommander > 0 ? 'text-danger-400' : 'text-success-300' },
+    { val: aImprimer,  label: 'Impressions 3D',      accent: aImprimer > 0 ? 'text-alert-400' : 'text-success-300' },
+    { val: alertes,    label: 'Alertes actives',     accent: alertes > 0 ? 'text-alert-400' : 'text-success-300' },
   ]
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 bg-primary-900 rounded-2xl overflow-hidden mb-8">
+      <div className="px-6 py-5 flex flex-col gap-1.5">
+        <span className="text-5xl font-bold leading-none tracking-tight tabular-nums text-white">{total}</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">Pièces actives</span>
+      </div>
+
+      <div className="px-6 py-5 flex flex-col gap-1.5 relative">
+        {editing ? (
+          <input
+            type="number"
+            min={0}
+            autoFocus
+            value={valeur}
+            onChange={(e) => setValeur(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={valider}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') valider()
+              if (e.key === 'Escape') { setValeur(String(productionHebdo)); setEditing(false) }
+            }}
+            className="w-24 bg-transparent text-5xl font-bold leading-none tracking-tight tabular-nums text-success-300 border-b-2 border-success-300 focus:outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Cliquer pour simuler une production différente"
+            className={`text-5xl font-bold leading-none tracking-tight tabular-nums text-left hover:opacity-80 transition-opacity ${
+              productionHebdo > 0 ? 'text-success-300' : 'text-primary-400'
+            }`}
+          >
+            {productionHebdo}
+          </button>
+        )}
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1 flex items-center gap-1.5">
+          Bouées méca / semaine
+          {simulationActive && (
+            <span className="px-1.5 py-0.5 rounded bg-alert-500 text-white text-[9px] normal-case tracking-normal font-bold">
+              Simulation
+            </span>
+          )}
+        </span>
+        {simulationActive && (
+          <button
+            type="button"
+            onClick={onResetProduction}
+            className="absolute top-2 right-2 text-[9px] font-semibold text-primary-300 hover:text-white underline underline-offset-2"
+          >
+            Réinitialiser
+          </button>
+        )}
+      </div>
+
       {metrics.map((m, i) => (
         <div key={i} className="px-6 py-5 flex flex-col gap-1.5">
           <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${m.accent}`}>
@@ -233,6 +306,8 @@ export default function Dashboard() {
   const [commentaireAlerte, setCommentaireAlerte] = useState('')
   const [envoiAlerte, setEnvoiAlerte] = useState(false)
 
+  const [simulationBouees, setSimulationBouees] = useState<number | null>(null)
+
   useEffect(() => {
     async function charger() {
       const [{ data: seData }, { data: nomData }] = await Promise.all([
@@ -246,17 +321,33 @@ export default function Dashboard() {
     charger()
   }, [])
 
+  const boueeMecaId = useMemo(
+    () => sousEnsembles.find((se) => se.nom.trim().toLowerCase() === 'bouée méca')?.id ?? null,
+    [sousEnsembles]
+  )
+
+  // Consommation utilisée pour les calculs: si une simulation manuelle est active,
+  // on remplace la quantité "bouée méca" par la valeur saisie, en conservant les
+  // autres sous-ensembles inchangés.
+  const consommationEffective = useMemo(() => {
+    if (simulationBouees === null || !boueeMecaId) return consommationMoyenne
+    const autres = consommationMoyenne.filter((c) => c.sous_ensemble_id !== boueeMecaId)
+    return [...autres, { sous_ensemble_id: boueeMecaId, nom: 'Bouée méca', quantite: simulationBouees }]
+  }, [consommationMoyenne, simulationBouees, boueeMecaId])
+
+  const productionHebdoAffichee = simulationBouees ?? totalHebdo
+
   const achatsRecommandes = useMemo(
-    () => calcAchatsRecommandes(pieces, nomenclature, consommationMoyenne),
-    [pieces, nomenclature, consommationMoyenne]
+    () => calcAchatsRecommandes(pieces, nomenclature, consommationEffective),
+    [pieces, nomenclature, consommationEffective]
   )
 
   const impressions3D = useMemo(
-    () => calcImpressions3DRecommandees(pieces, nomenclature, consommationMoyenne),
-    [pieces, nomenclature, consommationMoyenne]
+    () => calcImpressions3DRecommandees(pieces, nomenclature, consommationEffective),
+    [pieces, nomenclature, consommationEffective]
   )
 
-  const conso3DActive = consommationMoyenne.some((c) => c.quantite > 0)
+  const conso3DActive = consommationEffective.some((c) => c.quantite > 0)
 
   const chargement = chargementStock || chargementAlertes || chargementSE || chargementProd
 
@@ -305,10 +396,13 @@ export default function Dashboard() {
           {/* KPI strip */}
           <KpiStrip
             total={pieces.length}
-            productionHebdo={totalHebdo}
+            productionHebdo={productionHebdoAffichee}
             aCommander={achatsRecommandes.length}
             aImprimer={impressions3D.length}
             alertes={alertes.length}
+            simulationActive={simulationBouees !== null}
+            onChangeProduction={setSimulationBouees}
+            onResetProduction={() => setSimulationBouees(null)}
           />
 
           {/* Paquet 1 — Sous-ensembles disponibles (juste sous le bandeau KPI) */}
