@@ -4,6 +4,7 @@ import { useStock } from '../hooks/useStock'
 import { useAlertes } from '../hooks/useAlertes'
 import { useUtilisateur } from '../hooks/useUtilisateur'
 import { useProductionHebdo } from '../hooks/useProductionHebdo'
+import { useCommandes } from '../hooks/useCommandes'
 import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
 import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
 import { calcImpressions3DRecommandees } from '../utils/calcImpressions3D'
@@ -210,11 +211,15 @@ function AlerteItem({ alerte, onResoudre }: { alerte: AlerteManuelle; onResoudre
 
 // ─── Achat recommandé row ─────────────────────────────────────────────────────
 
-function AchatRow({ achat }: { achat: AchatRecommande }) {
+function AchatRow({ achat, commandee }: { achat: AchatRecommande; commandee?: boolean }) {
   const critique = achat.urgence === 'critique'
-  const barColor = critique ? '#E53535' : '#F97316'
-  const badgeClass = critique ? 'bg-danger-100 text-danger-600' : 'bg-alert-100 text-alert-600'
-  const badgeText = critique ? 'Rupture estimée' : 'À commander'
+  const barColor = commandee ? '#22B84F' : critique ? '#E53535' : '#F97316'
+  const badgeClass = commandee
+    ? 'bg-success-100 text-success-700'
+    : critique
+      ? 'bg-danger-100 text-danger-600'
+      : 'bg-alert-100 text-alert-600'
+  const badgeText = commandee ? 'Commandée' : critique ? 'Rupture estimée' : 'À commander'
   return (
     <div className="flex rounded-xl overflow-hidden border border-primary-100">
       <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: barColor }} />
@@ -321,6 +326,7 @@ export default function Dashboard() {
   const { pieces, chargement: chargementStock } = useStock()
   const { alertes, chargement: chargementAlertes, creerAlerte, resoudreAlerte } = useAlertes()
   const { totalHebdo, consommationMoyenne, chargement: chargementProd } = useProductionHebdo()
+  const { commandesEnCours } = useCommandes()
 
   const [sousEnsembles, setSousEnsembles] = useState<SousEnsemble[]>([])
   const [nomenclature, setNomenclature] = useState<NomEntry[]>([])
@@ -370,6 +376,11 @@ export default function Dashboard() {
   const achatsRecommandes = useMemo(
     () => calcAchatsRecommandes(pieces, nomenclaturePieces, consommationEffective),
     [pieces, nomenclaturePieces, consommationEffective]
+  )
+
+  const piecesDejaCommandees = useMemo(
+    () => new Set(commandesEnCours.map((c) => c.piece_id)),
+    [commandesEnCours]
   )
 
   const impressions3D = useMemo(
@@ -484,7 +495,7 @@ export default function Dashboard() {
               ) : (
                 <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 max-h-[280px]">
                   {achatsRecommandes.map((a) => (
-                    <AchatRow key={a.piece.id} achat={a} />
+                    <AchatRow key={a.piece.id} achat={a} commandee={piecesDejaCommandees.has(a.piece.id)} />
                   ))}
                 </div>
               )}

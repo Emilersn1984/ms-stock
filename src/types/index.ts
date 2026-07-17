@@ -75,3 +75,22 @@ export type AlerteManuelle = {
 }
 
 export type CouleurSeuil = 'rouge' | 'jaune' | 'vert'
+
+export type Transporteur = 'colissimo' | 'chronopost' | 'ups' | 'dhl' | 'gls' | 'autre'
+
+export type StatutCommande = 'en_cours' | 'receptionnee'
+
+export type Commande = {
+  id: string
+  piece_id: string
+  quantite_commandee: number
+  date_commande: string
+  date_livraison_prevue: string | null
+  transporteur: Transporteur | null
+  numero_suivi: string | null
+  statut: StatutCommande
+  date_reception: string | null
+  utilisateur_id: string | null
+  created_at: string
+  pieces?: { nom: string } | null
+}
