@@ -28,6 +28,38 @@ function dateAujourdhui() {
   })
 }
 
+function normaliserNom(nom: string) {
+  return nom
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+const ORDRE_SOUS_ENSEMBLES = [
+  'colis termine ferme',
+  'bouee meca',
+  'tourelle',
+  'bb',
+  'enrouleur ferme',
+  'tambour resine',
+].map(normaliserNom)
+
+function trierSousEnsembles(sousEnsembles: SousEnsemble[]) {
+  const enStock = sousEnsembles.filter((se) => se.quantite > 0)
+  const horsStock = sousEnsembles.filter((se) => se.quantite <= 0)
+
+  const rangDe = (se: SousEnsemble) => {
+    const idx = ORDRE_SOUS_ENSEMBLES.indexOf(normaliserNom(se.nom))
+    return idx === -1 ? ORDRE_SOUS_ENSEMBLES.length : idx
+  }
+
+  enStock.sort((a, b) => rangDe(a) - rangDe(b) || a.nom.localeCompare(b.nom))
+  horsStock.sort((a, b) => rangDe(a) - rangDe(b) || a.nom.localeCompare(b.nom))
+
+  return [...enStock, ...horsStock]
+}
+
 function formatDateAlerte(dateStr: string) {
   return new Date(dateStr).toLocaleString('fr-FR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -463,8 +495,7 @@ export default function Dashboard() {
             ) : (
               <div className="overflow-y-auto max-h-[260px] pr-1">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {[...sousEnsembles]
-                    .sort((a, b) => b.quantite - a.quantite)
+                  {trierSousEnsembles(sousEnsembles)
                     .map((se) => <SousEnsembleCard key={se.id} se={se} />)}
                 </div>
               </div>

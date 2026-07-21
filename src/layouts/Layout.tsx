@@ -14,7 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Tableau de bord', icon: Home },
   { to: '/stock', label: 'Stock', icon: Package },
   { to: '/nomenclature', label: 'Sous-ensembles', icon: ClipboardList },
-  { to: '/livraisons', label: 'Livraisons', icon: Truck },
+  { to: '/commandes', label: 'Commandes', icon: Truck },
   { to: '/fabrication', label: 'Fabrication', icon: Settings },
   { to: '/historique', label: 'Historique', icon: ScrollText },
 ]

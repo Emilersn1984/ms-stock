@@ -3,7 +3,7 @@ import Layout from './layouts/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Stock from './pages/Stock'
-import Livraisons from './pages/Livraisons'
+import Commandes from './pages/Commandes'
 import Fabrication from './pages/Fabrication'
 import Nomenclature from './pages/Nomenclature'
 import Historique from './pages/Historique'
@@ -16,7 +16,8 @@ function App() {
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/stock" element={<Stock />} />
-          <Route path="/livraisons" element={<Livraisons />} />
+          <Route path="/commandes" element={<Commandes />} />
+          <Route path="/livraisons" element={<Navigate to="/commandes" replace />} />
           <Route path="/fabrication" element={<Fabrication />} />
           <Route path="/nomenclature" element={<Nomenclature />} />
           <Route path="/historique" element={<Historique />} />

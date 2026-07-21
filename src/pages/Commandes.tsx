@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Truck, Check, AlertCircle, Plus, PackageSearch, X } from 'lucide-react'
+import { Truck, Check, AlertCircle, Plus, PackageSearch, X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { useCommandes } from '../hooks/useCommandes'
@@ -92,11 +92,13 @@ function CommandeCard({
   commande,
   onMarquerRecu,
   onMettreAJourSuivi,
+  onSupprimer,
   chargement,
 }: {
   commande: Commande
   onMarquerRecu: () => void
   onMettreAJourSuivi: (transporteur: Transporteur, numeroSuivi: string) => Promise<void>
+  onSupprimer: () => Promise<void>
   chargement: boolean
 }) {
   const suiviManquant = !commande.numero_suivi
@@ -106,6 +108,18 @@ function CommandeCard({
   const [transporteurSaisi, setTransporteurSaisi] = useState<Transporteur | ''>(commande.transporteur ?? '')
   const [numeroSaisi, setNumeroSaisi] = useState(commande.numero_suivi ?? '')
   const [enregistrement, setEnregistrement] = useState(false)
+  const [confirmSuppr, setConfirmSuppr] = useState(false)
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false)
+
+  async function confirmerSuppression() {
+    setSuppressionEnCours(true)
+    try {
+      await onSupprimer()
+    } finally {
+      setSuppressionEnCours(false)
+      setConfirmSuppr(false)
+    }
+  }
 
   async function validerSuivi() {
     if (!transporteurSaisi || !numeroSaisi.trim()) return
@@ -185,6 +199,26 @@ function CommandeCard({
               <X size={12} />
             </button>
           </div>
+        ) : confirmSuppr ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-danger-600 font-medium flex-1">Supprimer cette commande ?</span>
+            <button
+              type="button"
+              onClick={confirmerSuppression}
+              disabled={suppressionEnCours}
+              className="flex-shrink-0 text-xs font-semibold text-white bg-danger-500 hover:bg-danger-600 transition-colors px-2.5 py-1.5 rounded-lg disabled:opacity-40"
+            >
+              {suppressionEnCours ? '…' : 'Oui, supprimer'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmSuppr(false)}
+              disabled={suppressionEnCours}
+              className="flex-shrink-0 text-xs text-primary-500 hover:text-primary-800 px-2 py-1.5 transition-colors"
+            >
+              Annuler
+            </button>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             {urlSuivi && (
@@ -216,6 +250,14 @@ function CommandeCard({
             >
               <Check size={12} />
               Marquer reçu
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmSuppr(true)}
+              title="Supprimer la commande"
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-auto"
+            >
+              <Trash2 size={13} />
             </button>
           </div>
         )}
@@ -254,7 +296,7 @@ function CommandeRecueRow({ commande }: { commande: Commande }) {
 
 // ─── Page principale ────────────────────────────────────────────────────────────
 
-export default function Livraisons() {
+export default function Commandes() {
   const { pieces, chargement: chargementStock, recharger: rechargerPieces } = useStock()
   const { commandesEnCours, commandesRecues, chargement: chargementCommandes, recharger: rechargerCommandes } = useCommandes()
   const { consommationMoyenne, chargement: chargementProd } = useProductionHebdo()
@@ -355,6 +397,18 @@ export default function Livraisons() {
     rechargerCommandes()
   }
 
+  async function supprimerCommande(commande: Commande) {
+    const { error } = await supabase
+      .from('commandes')
+      .delete()
+      .eq('id', commande.id)
+    if (error) {
+      setErreurReception(error.message)
+      throw error
+    }
+    rechargerCommandes()
+  }
+
   const commandesRecuesTriees = useMemo(
     () => [...commandesRecues].sort((a, b) => {
       const dateA = a.date_reception ? new Date(a.date_reception).getTime() : 0
@@ -382,7 +436,7 @@ export default function Livraisons() {
       {/* En-tête */}
       <div className="flex items-end justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-primary-900 leading-none">Livraisons</h1>
+          <h1 className="text-3xl font-bold text-primary-900 leading-none">Commandes</h1>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 mt-1.5">
             Gestionnaire de commandes
           </p>
@@ -442,6 +496,7 @@ export default function Livraisons() {
                     commande={c}
                     onMarquerRecu={() => marquerRecu(c)}
                     onMettreAJourSuivi={(transporteur, numeroSuivi) => mettreAJourSuivi(c, transporteur, numeroSuivi)}
+                    onSupprimer={() => supprimerCommande(c)}
                     chargement={receptionEnCours === c.id}
                   />
                 ))}
