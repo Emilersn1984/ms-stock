@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, Wrench, User, Plus, X } from 'lucide-react'
+import { Briefcase, Wrench, User, Plus, X, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Utilisateur, Role } from '../types'
 import { useUtilisateur } from '../hooks/useUtilisateur'
@@ -11,6 +11,8 @@ const ROLES: { value: Role; label: string; icon: LucideIcon }[] = [
   { value: 'ouvrier', label: 'Ouvrier', icon: Wrench },
   { value: 'autre', label: 'Autre', icon: User },
 ]
+
+const MOT_DE_PASSE_ADMIN = 'admin'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -29,8 +31,23 @@ export default function Login() {
   const [confirmSupprId, setConfirmSupprId] = useState<string | null>(null)
   const [suppressionEnCours, setSuppressionEnCours] = useState(false)
 
+  const [adminDeverrouille, setAdminDeverrouille] = useState(false)
+  const [motDePasse, setMotDePasse] = useState('')
+  const [erreurMdp, setErreurMdp] = useState<string | null>(null)
+
+  useEffect(() => {
+    setAdminDeverrouille(false)
+    setMotDePasse('')
+    setErreurMdp(null)
+  }, [roleSelectionne])
+
   useEffect(() => {
     if (!roleSelectionne) {
+      setUtilisateurs([])
+      return
+    }
+
+    if (roleSelectionne === 'patron' && !adminDeverrouille) {
       setUtilisateurs([])
       return
     }
@@ -55,7 +72,16 @@ export default function Login() {
         }
         setChargement(false)
       })
-  }, [roleSelectionne])
+  }, [roleSelectionne, adminDeverrouille])
+
+  function verifierMotDePasse() {
+    if (motDePasse === MOT_DE_PASSE_ADMIN) {
+      setAdminDeverrouille(true)
+      setErreurMdp(null)
+    } else {
+      setErreurMdp('Mot de passe incorrect.')
+    }
+  }
 
   function handleSelectUser(user: Utilisateur) {
     connecter(user)
@@ -139,6 +165,35 @@ export default function Login() {
                 <div className="flex-1 h-px bg-primary-100" />
               </div>
 
+              {roleSelectionne === 'patron' && !adminDeverrouille ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-primary-600">
+                    Entrez le mot de passe administrateur pour continuer.
+                  </p>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-400" />
+                    <input
+                      type="password"
+                      value={motDePasse}
+                      onChange={(e) => setMotDePasse(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && verifierMotDePasse()}
+                      placeholder="Mot de passe"
+                      autoFocus
+                      className="w-full border border-primary-200 rounded-xl pl-9 pr-3 py-2 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                    />
+                  </div>
+                  {erreurMdp && (
+                    <p className="text-danger-600 bg-danger-100 rounded-xl p-3 text-xs">{erreurMdp}</p>
+                  )}
+                  <button
+                    onClick={verifierMotDePasse}
+                    className="w-full bg-primary-900 hover:bg-primary-800 text-white rounded-xl py-2 text-sm font-semibold transition-colors"
+                  >
+                    Déverrouiller
+                  </button>
+                </div>
+              ) : (
+                <>
               {chargement && (
                 <div className="flex items-center justify-center py-6">
                   <p className="text-sm text-primary-400">Chargement…</p>
@@ -253,6 +308,8 @@ export default function Login() {
                     </div>
                   )}
                 </div>
+              )}
+                </>
               )}
             </div>
           )}

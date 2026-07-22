@@ -19,12 +19,18 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/historique', label: 'Historique', icon: ScrollText },
 ]
 
+const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/historique']
+
 export default function Layout() {
   const { utilisateur, deconnecter } = useUtilisateur()
 
   if (!utilisateur) {
     return <Navigate to="/login" replace />
   }
+
+  const navItems = utilisateur.role === 'ouvrier'
+    ? NAV_ITEMS.filter((item) => !NAV_ITEMS_MASQUES_OUVRIER.includes(item.to))
+    : NAV_ITEMS
 
   return (
     <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
@@ -33,7 +39,7 @@ export default function Layout() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar desktop */}
         <aside className="hidden md:flex flex-col w-56 bg-white border-r border-primary-100 py-4 px-3 gap-1 flex-shrink-0 overflow-y-auto">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -59,8 +65,8 @@ export default function Layout() {
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-primary-100 z-10">
-        <div className="grid grid-cols-6 h-16">
-          {NAV_ITEMS.map((item) => (
+        <div className={`grid h-16 ${navItems.length === 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
