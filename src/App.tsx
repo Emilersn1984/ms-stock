@@ -7,6 +7,7 @@ import Commandes from './pages/Commandes'
 import Fabrication from './pages/Fabrication'
 import Nomenclature from './pages/Nomenclature'
 import Historique from './pages/Historique'
+import RouteProtegee from './components/RouteProtegee'
 
 function App() {
   return (
@@ -16,11 +17,17 @@ function App() {
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/stock" element={<Stock />} />
-          <Route path="/commandes" element={<Commandes />} />
+          <Route
+            path="/commandes"
+            element={<RouteProtegee rolesInterdits={['ouvrier']}><Commandes /></RouteProtegee>}
+          />
           <Route path="/livraisons" element={<Navigate to="/commandes" replace />} />
           <Route path="/fabrication" element={<Fabrication />} />
           <Route path="/nomenclature" element={<Nomenclature />} />
-          <Route path="/historique" element={<Historique />} />
+          <Route
+            path="/historique"
+            element={<RouteProtegee rolesInterdits={['ouvrier']}><Historique /></RouteProtegee>}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
