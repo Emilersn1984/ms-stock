@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Check } from 'lucide-react'
+import { AlertTriangle, Check, Pencil } from 'lucide-react'
 import { useStock } from '../hooks/useStock'
 import { useAlertes } from '../hooks/useAlertes'
 import { useUtilisateur } from '../hooks/useUtilisateur'
-import { useProductionHebdo } from '../hooks/useProductionHebdo'
+import { useParametreProduction } from '../hooks/useParametreProduction'
 import { useCommandes } from '../hooks/useCommandes'
 import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
 import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
 import { calcImpressions3DRecommandees } from '../utils/calcImpressions3D'
 import type { Impression3DRecommandee } from '../utils/calcImpressions3D'
-import { calcMaxFabricableDetail } from '../utils/calcDisponibilite'
+import { calcMaxFabricableDetail, calcBesoinPieces } from '../utils/calcDisponibilite'
 import { supabase } from '../lib/supabase'
 import type { SousEnsemble, AlerteManuelle, Piece } from '../types'
 
@@ -70,14 +70,13 @@ function formatDateAlerte(dateStr: string) {
 // ─── KPI Strip ─────────────────────────────────────────────────────────────────
 
 function KpiStrip({
-  productionHebdo, simulationActive, onChangeProduction, onResetProduction,
-  boueesFabricables, pieceLimitante, semainesAutonomie,
+  productionHebdo, onChangeProduction, enregistrement,
+  colisFabricables, pieceLimitante, semainesAutonomie,
 }: {
   productionHebdo: number
-  simulationActive: boolean
   onChangeProduction: (val: number) => void
-  onResetProduction: () => void
-  boueesFabricables: number
+  enregistrement: boolean
+  colisFabricables: number
   pieceLimitante: Piece | null
   semainesAutonomie: number | null
 }) {
@@ -98,9 +97,9 @@ function KpiStrip({
     setEditing(false)
   }
 
-  const fabricableAccent = boueesFabricables === 0
+  const fabricableAccent = colisFabricables === 0
     ? 'text-danger-400'
-    : boueesFabricables < productionHebdo
+    : colisFabricables < productionHebdo
       ? 'text-alert-400'
       : 'text-success-300'
 
@@ -134,39 +133,34 @@ function KpiStrip({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            title="Cliquer pour simuler une production différente"
-            className={`text-5xl font-bold leading-none tracking-tight tabular-nums text-left hover:opacity-80 transition-opacity ${
+            title="Cliquer pour régler la valeur manuellement"
+            className={`flex items-center gap-2 text-5xl font-bold leading-none tracking-tight tabular-nums text-left hover:opacity-80 transition-opacity ${
               productionHebdo > 0 ? 'text-success-300' : 'text-primary-400'
             }`}
           >
             {productionHebdo}
+            <Pencil size={15} className="text-primary-300" />
           </button>
         )}
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1 flex items-center gap-1.5">
-          Bouées méca / semaine
-          {simulationActive && (
-            <span className="px-1.5 py-0.5 rounded bg-alert-500 text-white text-[9px] normal-case tracking-normal font-bold">
-              Simulation
-            </span>
-          )}
+          Colis terminé fermé / semaine
+          <span className="px-1.5 py-0.5 rounded bg-primary-700 text-primary-100 text-[9px] normal-case tracking-normal font-bold">
+            Réglable
+          </span>
         </span>
-        {simulationActive && (
-          <button
-            type="button"
-            onClick={onResetProduction}
-            className="absolute top-2 right-2 text-[9px] font-semibold text-primary-300 hover:text-white underline underline-offset-2"
-          >
-            Réinitialiser
-          </button>
+        {enregistrement && (
+          <span className="absolute top-2 right-2 text-[9px] font-semibold text-primary-300">
+            Enregistrement…
+          </span>
         )}
       </div>
 
       <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
         <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${fabricableAccent}`}>
-          {boueesFabricables}
+          {colisFabricables}
         </span>
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
-          Bouées fabricables (stock actuel)
+          Colis fabricables (stock actuel)
         </span>
         {pieceLimitante && (
           <span className="text-[10px] text-primary-300 truncate">
@@ -358,7 +352,7 @@ export default function Dashboard() {
   const estOuvrier = utilisateur?.role === 'ouvrier'
   const { pieces, chargement: chargementStock } = useStock()
   const { alertes: toutesLesAlertes, chargement: chargementAlertes, creerAlerte, resoudreAlerte } = useAlertes()
-  const { totalHebdo, consommationMoyenne, chargement: chargementProd } = useProductionHebdo()
+  const { colisParSemaine, definirColisParSemaine, chargement: chargementParam, enregistrement } = useParametreProduction()
   const { commandesEnCours } = useCommandes()
 
   const alertes = useMemo(
@@ -377,8 +371,6 @@ export default function Dashboard() {
   const [commentaireAlerte, setCommentaireAlerte] = useState('')
   const [envoiAlerte, setEnvoiAlerte] = useState(false)
 
-  const [simulationBouees, setSimulationBouees] = useState<number | null>(null)
-
   useEffect(() => {
     async function charger() {
       const [{ data: seData }, { data: nomData }] = await Promise.all([
@@ -392,30 +384,22 @@ export default function Dashboard() {
     charger()
   }, [])
 
-  const boueeMecaId = useMemo(
-    () => sousEnsembles.find((se) => se.nom.trim().toLowerCase() === 'bouée méca')?.id ?? null,
+  const colisTermineFermeId = useMemo(
+    () => sousEnsembles.find((se) => se.nom.trim().toLowerCase() === 'colis terminé fermé')?.id ?? null,
     [sousEnsembles]
   )
 
-  // Consommation utilisée pour les calculs: si une simulation manuelle est active,
-  // on remplace la quantité "bouée méca" par la valeur saisie, en conservant les
-  // autres sous-ensembles inchangés.
-  const consommationEffective = useMemo(() => {
-    if (simulationBouees === null || !boueeMecaId) return consommationMoyenne
-    const autres = consommationMoyenne.filter((c) => c.sous_ensemble_id !== boueeMecaId)
-    return [...autres, { sous_ensemble_id: boueeMecaId, nom: 'Bouée méca', quantite: simulationBouees }]
-  }, [consommationMoyenne, simulationBouees, boueeMecaId])
-
-  const productionHebdoAffichee = simulationBouees ?? totalHebdo
-
-  const nomenclaturePieces = useMemo(
-    () => nomenclature.filter((n): n is NomEntry & { piece_id: string } => n.piece_id !== null),
-    [nomenclature]
+  // Besoin en pièces dérivé uniquement de la valeur "Colis terminé fermé / semaine"
+  // réglée à la main, via l'explosion complète de la nomenclature (BOM). Les
+  // productions réellement déclarées dans l'onglet Fabrication sont ignorées.
+  const consommationParPiece = useMemo(
+    () => (colisTermineFermeId ? calcBesoinPieces(colisTermineFermeId, colisParSemaine, nomenclature) : new Map<string, number>()),
+    [colisTermineFermeId, colisParSemaine, nomenclature]
   )
 
   const achatsRecommandes = useMemo(
-    () => calcAchatsRecommandes(pieces, nomenclaturePieces, consommationEffective),
-    [pieces, nomenclaturePieces, consommationEffective]
+    () => calcAchatsRecommandes(pieces, consommationParPiece),
+    [pieces, consommationParPiece]
   )
 
   const piecesDejaCommandees = useMemo(
@@ -424,20 +408,20 @@ export default function Dashboard() {
   )
 
   const impressions3D = useMemo(
-    () => calcImpressions3DRecommandees(pieces, nomenclaturePieces, consommationEffective),
-    [pieces, nomenclaturePieces, consommationEffective]
+    () => calcImpressions3DRecommandees(pieces, consommationParPiece),
+    [pieces, consommationParPiece]
   )
 
-  const { max: boueesFabricables, pieceLimitante } = useMemo(
-    () => (boueeMecaId ? calcMaxFabricableDetail(boueeMecaId, pieces, nomenclature) : { max: 0, pieceLimitante: null }),
-    [boueeMecaId, pieces, nomenclature]
+  const { max: colisFabricables, pieceLimitante } = useMemo(
+    () => (colisTermineFermeId ? calcMaxFabricableDetail(colisTermineFermeId, pieces, nomenclature) : { max: 0, pieceLimitante: null }),
+    [colisTermineFermeId, pieces, nomenclature]
   )
 
-  const semainesAutonomie = productionHebdoAffichee > 0 ? boueesFabricables / productionHebdoAffichee : null
+  const semainesAutonomie = colisParSemaine > 0 ? colisFabricables / colisParSemaine : null
 
-  const conso3DActive = consommationEffective.some((c) => c.quantite > 0)
+  const conso3DActive = colisParSemaine > 0
 
-  const chargement = chargementStock || chargementAlertes || chargementSE || chargementProd
+  const chargement = chargementStock || chargementAlertes || chargementSE || chargementParam
 
   async function handleCreerAlerte() {
     if (!messageAlerte.trim() || !utilisateur) return
@@ -483,11 +467,10 @@ export default function Dashboard() {
         <>
           {/* KPI strip */}
           <KpiStrip
-            productionHebdo={productionHebdoAffichee}
-            simulationActive={simulationBouees !== null}
-            onChangeProduction={setSimulationBouees}
-            onResetProduction={() => setSimulationBouees(null)}
-            boueesFabricables={boueesFabricables}
+            productionHebdo={colisParSemaine}
+            onChangeProduction={definirColisParSemaine}
+            enregistrement={enregistrement}
+            colisFabricables={colisFabricables}
             pieceLimitante={pieceLimitante}
             semainesAutonomie={semainesAutonomie}
           />
@@ -523,13 +506,13 @@ export default function Dashboard() {
                 />
                 {conso3DActive && (
                   <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide mb-3">
-                    Basé sur la plus forte production entre cette semaine et la précédente
+                    Basé sur la valeur réglée à la main de Colis terminé fermé / semaine
                   </p>
                 )}
                 {achatsRecommandes.length === 0 ? (
                   <EtatVide texte={
                     !conso3DActive
-                      ? 'Aucune production récente déclarée — déclarez une fabrication pour activer les prévisions'
+                      ? 'Colis terminé fermé / semaine réglé à 0 — augmentez la valeur pour activer les prévisions'
                       : 'Aucun achat requis — tous les stocks sont suffisants'
                   } />
                 ) : (

@@ -35,6 +35,21 @@ function resoudreRecursif(
   }
 }
 
+// Explose la nomenclature (BOM) depuis `seId`, en multipliant les quantités
+// requises par `multiplicateur`, et retourne le besoin total par pièce
+// (piece_id -> quantité). Utilisé pour dériver les besoins en pièces à partir
+// d'une valeur de production hebdomadaire réglée à la main, indépendamment
+// de tout stock ou production réellement déclarée.
+export function calcBesoinPieces(
+  seId: string,
+  multiplicateur: number,
+  nomenclature: NomenclatureRow[]
+): Map<string, number> {
+  const besoin = new Map<string, number>()
+  resoudreRecursif(seId, multiplicateur, besoin, nomenclature, new Set())
+  return besoin
+}
+
 export function calcMaxFabricable(
   seId: string,
   pieces: Piece[],
