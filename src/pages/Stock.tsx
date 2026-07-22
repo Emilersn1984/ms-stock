@@ -233,6 +233,7 @@ export default function Stock() {
   const [seAModifier, setSeAModifier] = useState<SousEnsemble | null>(null)
   const [showAjouter, setShowAjouter] = useState(false)
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null)
+  const [triColonne, setTriColonne] = useState<'quantite' | 'delai' | 'statut' | null>(null)
 
   useEffect(() => {
     async function charger() {
@@ -276,6 +277,29 @@ export default function Stock() {
       return matchNom && matchCat && matchSE && matchNonAttr
     })
   }, [pieces, recherche, categorieFiltre, sousSystemeFiltre, filtreNonAttribuees, pieceVersSeIds])
+
+  const piecesTriees = useMemo(() => {
+    if (!triColonne) return piecesFiltrees
+    const arr = [...piecesFiltrees]
+    if (triColonne === 'quantite') {
+      arr.sort((a, b) => a.quantite - b.quantite)
+    } else if (triColonne === 'delai') {
+      arr.sort((a, b) => {
+        if (a.delai_appro == null && b.delai_appro == null) return 0
+        if (a.delai_appro == null) return 1
+        if (b.delai_appro == null) return -1
+        return a.delai_appro - b.delai_appro
+      })
+    } else if (triColonne === 'statut') {
+      const priorite: Record<CouleurSeuil, number> = { rouge: 0, jaune: 1, vert: 2 }
+      arr.sort((a, b) => priorite[getCouleurSeuil(a)] - priorite[getCouleurSeuil(b)])
+    }
+    return arr
+  }, [piecesFiltrees, triColonne])
+
+  const basculerTri = (colonne: 'quantite' | 'delai' | 'statut') => {
+    setTriColonne((prev) => (prev === colonne ? null : colonne))
+  }
 
   const stats = useMemo(() => {
     return pieces.reduce(
@@ -516,14 +540,44 @@ export default function Stock() {
                   <tr>
                     <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce</th>
                     <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Catégorie</th>
-                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
-                    <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Délai appro</th>
-                    <th className="text-center text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Statut</th>
+                    <th className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => basculerTri('quantite')}
+                        className={`flex items-center justify-end gap-1 w-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                          triColonne === 'quantite' ? 'text-primary-900' : 'text-primary-600 hover:text-primary-800'
+                        }`}
+                      >
+                        Quantité
+                        {triColonne === 'quantite' && <ChevronDown className="w-3 h-3 rotate-180" />}
+                      </button>
+                    </th>
+                    <th className="px-5 py-3.5 text-center">
+                      <button
+                        onClick={() => basculerTri('delai')}
+                        className={`flex items-center justify-center gap-1 w-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                          triColonne === 'delai' ? 'text-primary-900' : 'text-primary-600 hover:text-primary-800'
+                        }`}
+                      >
+                        Délai appro
+                        {triColonne === 'delai' && <ChevronDown className="w-3 h-3 rotate-180" />}
+                      </button>
+                    </th>
+                    <th className="px-5 py-3.5 text-center">
+                      <button
+                        onClick={() => basculerTri('statut')}
+                        className={`flex items-center justify-center gap-1 w-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                          triColonne === 'statut' ? 'text-primary-900' : 'text-primary-600 hover:text-primary-800'
+                        }`}
+                      >
+                        Statut
+                        {triColonne === 'statut' && <ChevronDown className="w-3 h-3 rotate-180" />}
+                      </button>
+                    </th>
                     <th className="px-5 py-3.5" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-primary-50">
-                  {piecesFiltrees.map((piece, i) => (
+                  {piecesTriees.map((piece, i) => (
                     <PieceRow
                       key={piece.id}
                       piece={piece}
@@ -540,7 +594,7 @@ export default function Stock() {
 
           {/* Cartes mobile */}
           <AnimatedList maxHeightClass="max-h-[55vh]" className="md:hidden space-y-1.5">
-            {piecesFiltrees.map((piece, i) => (
+            {piecesTriees.map((piece, i) => (
               <PieceCard
                 key={piece.id}
                 piece={piece}
