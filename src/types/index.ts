@@ -76,7 +76,7 @@ export type AlerteManuelle = {
 
 export type CouleurSeuil = 'rouge' | 'jaune' | 'vert'
 
-export type Transporteur = 'colissimo' | 'chronopost' | 'ups' | 'dhl' | 'gls' | 'autre'
+export type Transporteur = 'colissimo' | 'chronopost' | 'ups' | 'dhl' | 'fedex' | 'gls' | 'autre'
 
 export type StatutCommande = 'en_cours' | 'receptionnee'
 

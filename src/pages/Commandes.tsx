@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Truck, Check, AlertCircle, Plus, PackageSearch, X, Trash2 } from 'lucide-react'
+import { Truck, Check, AlertCircle, Plus, PackageSearch, Pencil, X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { useCommandes } from '../hooks/useCommandes'
@@ -93,12 +93,14 @@ function CommandeCard({
   onMarquerRecu,
   onMettreAJourSuivi,
   onSupprimer,
+  onModifier,
   chargement,
 }: {
   commande: Commande
   onMarquerRecu: () => void
   onMettreAJourSuivi: (transporteur: Transporteur, numeroSuivi: string) => Promise<void>
   onSupprimer: () => Promise<void>
+  onModifier: () => void
   chargement: boolean
 }) {
   const suiviManquant = !commande.numero_suivi
@@ -253,9 +255,17 @@ function CommandeCard({
             </button>
             <button
               type="button"
+              onClick={onModifier}
+              title="Modifier la commande"
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-primary-700 hover:bg-primary-100 transition-colors ml-auto"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              type="button"
               onClick={() => setConfirmSuppr(true)}
               title="Supprimer la commande"
-              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-auto"
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors"
             >
               <Trash2 size={13} />
             </button>
@@ -307,6 +317,7 @@ export default function Commandes() {
 
   const [modalOuvert, setModalOuvert] = useState(false)
   const [pieceModal, setPieceModal] = useState<Piece | null>(null)
+  const [commandeEnEdition, setCommandeEnEdition] = useState<Commande | null>(null)
   const [receptionEnCours, setReceptionEnCours] = useState<string | null>(null)
   const [erreurReception, setErreurReception] = useState<string | null>(null)
 
@@ -339,12 +350,20 @@ export default function Commandes() {
 
   function ouvrirModal(piece: Piece | null) {
     setPieceModal(piece)
+    setCommandeEnEdition(null)
+    setModalOuvert(true)
+  }
+
+  function ouvrirModalEdition(commande: Commande) {
+    setPieceModal(null)
+    setCommandeEnEdition(commande)
     setModalOuvert(true)
   }
 
   function fermerModal() {
     setModalOuvert(false)
     setPieceModal(null)
+    setCommandeEnEdition(null)
   }
 
   async function marquerRecu(commande: Commande) {
@@ -497,6 +516,7 @@ export default function Commandes() {
                     onMarquerRecu={() => marquerRecu(c)}
                     onMettreAJourSuivi={(transporteur, numeroSuivi) => mettreAJourSuivi(c, transporteur, numeroSuivi)}
                     onSupprimer={() => supprimerCommande(c)}
+                    onModifier={() => ouvrirModalEdition(c)}
                     chargement={receptionEnCours === c.id}
                   />
                 ))}
@@ -530,6 +550,7 @@ export default function Commandes() {
           piece={pieceModal}
           pieces={pieces}
           utilisateur={utilisateur}
+          commandeAModifier={commandeEnEdition}
           onClose={fermerModal}
           onCreated={rechargerCommandes}
         />

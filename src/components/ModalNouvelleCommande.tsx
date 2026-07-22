@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { PackagePlus, Search, X } from 'lucide-react'
+import { PackagePlus, PencilLine, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { Piece, Transporteur, Utilisateur } from '../types'
+import { Commande, Piece, Transporteur, Utilisateur } from '../types'
 import { TRANSPORTEURS } from '../utils/trackingUrl'
 
 function dateAujourdhuiISO() {
@@ -14,23 +14,39 @@ export default function ModalNouvelleCommande({
   piece,
   pieces,
   utilisateur,
+  commandeAModifier,
   onClose,
   onCreated,
 }: {
   piece: Piece | null
   pieces: Piece[]
   utilisateur: Utilisateur
+  commandeAModifier?: Commande | null
   onClose: () => void
   onCreated: () => void
 }) {
-  const [pieceSelectionnee, setPieceSelectionnee] = useState<Piece | null>(piece)
-  const [recherchePiece, setRecherchePiece] = useState(piece?.nom ?? '')
+  const modeEdition = !!commandeAModifier
+  const pieceInitiale = commandeAModifier
+    ? pieces.find((p) => p.id === commandeAModifier.piece_id) ?? null
+    : piece
+  const [pieceSelectionnee, setPieceSelectionnee] = useState<Piece | null>(pieceInitiale)
+  const [recherchePiece, setRecherchePiece] = useState(
+    pieceInitiale?.nom ?? commandeAModifier?.pieces?.nom ?? ''
+  )
   const [dropdownOuvert, setDropdownOuvert] = useState(false)
-  const [quantite, setQuantite] = useState('')
-  const [dateCommande, setDateCommande] = useState(dateAujourdhuiISO())
-  const [dateLivraisonPrevue, setDateLivraisonPrevue] = useState('')
-  const [transporteur, setTransporteur] = useState<Transporteur | ''>('')
-  const [numeroSuivi, setNumeroSuivi] = useState('')
+  const [quantite, setQuantite] = useState(
+    commandeAModifier ? String(commandeAModifier.quantite_commandee) : ''
+  )
+  const [dateCommande, setDateCommande] = useState(
+    commandeAModifier?.date_commande ?? dateAujourdhuiISO()
+  )
+  const [dateLivraisonPrevue, setDateLivraisonPrevue] = useState(
+    commandeAModifier?.date_livraison_prevue ?? ''
+  )
+  const [transporteur, setTransporteur] = useState<Transporteur | ''>(
+    commandeAModifier?.transporteur ?? ''
+  )
+  const [numeroSuivi, setNumeroSuivi] = useState(commandeAModifier?.numero_suivi ?? '')
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
 
@@ -68,21 +84,36 @@ export default function ModalNouvelleCommande({
     setEnvoi(true)
     setErreur(null)
     try {
-      const { error } = await supabase.from('commandes').insert({
-        piece_id: pieceSelectionnee.id,
-        quantite_commandee: qte,
-        date_commande: dateCommande,
-        date_livraison_prevue: dateLivraisonPrevue || null,
-        transporteur: transporteur || null,
-        numero_suivi: numeroSuivi.trim() || null,
-        statut: 'en_cours',
-        utilisateur_id: utilisateur.id,
-      })
-      if (error) throw error
+      if (modeEdition && commandeAModifier) {
+        const { error } = await supabase
+          .from('commandes')
+          .update({
+            piece_id: pieceSelectionnee.id,
+            quantite_commandee: qte,
+            date_commande: dateCommande,
+            date_livraison_prevue: dateLivraisonPrevue || null,
+            transporteur: transporteur || null,
+            numero_suivi: numeroSuivi.trim() || null,
+          })
+          .eq('id', commandeAModifier.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('commandes').insert({
+          piece_id: pieceSelectionnee.id,
+          quantite_commandee: qte,
+          date_commande: dateCommande,
+          date_livraison_prevue: dateLivraisonPrevue || null,
+          transporteur: transporteur || null,
+          numero_suivi: numeroSuivi.trim() || null,
+          statut: 'en_cours',
+          utilisateur_id: utilisateur.id,
+        })
+        if (error) throw error
+      }
       onCreated()
       onClose()
     } catch (err: unknown) {
-      setErreur(err instanceof Error ? err.message : 'Erreur lors de la création de la commande')
+      setErreur(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement de la commande')
     } finally {
       setEnvoi(false)
     }
@@ -94,11 +125,19 @@ export default function ModalNouvelleCommande({
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
-              <PackagePlus size={17} className="text-primary-700" />
+              {modeEdition ? (
+                <PencilLine size={17} className="text-primary-700" />
+              ) : (
+                <PackagePlus size={17} className="text-primary-700" />
+              )}
             </div>
             <div>
-              <h2 className="text-base font-bold text-primary-900 leading-tight">Nouvelle commande</h2>
-              <p className="text-xs text-primary-500 mt-0.5">Renseigner les détails de la commande</p>
+              <h2 className="text-base font-bold text-primary-900 leading-tight">
+                {modeEdition ? 'Modifier la commande' : 'Nouvelle commande'}
+              </h2>
+              <p className="text-xs text-primary-500 mt-0.5">
+                {modeEdition ? 'Mettre à jour les détails de la commande' : 'Renseigner les détails de la commande'}
+              </p>
             </div>
           </div>
           <button
@@ -246,7 +285,7 @@ export default function ModalNouvelleCommande({
               disabled={envoi || !pieceSelectionnee || !quantite.trim()}
               className="flex-1 py-2.5 bg-primary-900 hover:bg-primary-800 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
             >
-              {envoi ? 'Enregistrement…' : 'Valider la commande'}
+              {envoi ? 'Enregistrement…' : modeEdition ? 'Enregistrer les modifications' : 'Valider la commande'}
             </button>
           </div>
         </form>
