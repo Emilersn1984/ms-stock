@@ -1,0 +1,734 @@
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { PackagePlus, Send, Search, X, Minus, Plus as PlusIcon, Pencil, UserSearch, UserPlus2 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import {
+  Client,
+  Expedition,
+  ExpeditionItem,
+  SousEnsemble,
+  Transporteur,
+  CategorieExpedition,
+  Langue,
+  Utilisateur,
+} from '../types'
+import { TRANSPORTEURS } from '../utils/trackingUrl'
+import { LANGUES } from '../utils/langues'
+import { PAYS, drapeauPays } from '../utils/pays'
+import { creerOperation } from '../utils/creerOperation'
+
+const CATEGORIES: { value: CategorieExpedition; label: string }[] = [
+  { value: 'vente', label: 'Vente' },
+  { value: 'sav', label: 'SAV' },
+  { value: 'demo', label: 'Démo' },
+  { value: 'autre', label: 'Autre' },
+]
+
+const VERSIONS_CODE = ['v1', 'v2', 'v3', 'v4', 'v5']
+
+type Props = {
+  mode: 'creer' | 'finaliser' | 'modifier'
+  expedition: Expedition | null
+  clients: Client[]
+  sousEnsembles: SousEnsemble[]
+  expeditionsEnvoyees: Expedition[]
+  utilisateur: Utilisateur
+  onClose: () => void
+  onSaved: () => void
+}
+
+function adresseComplete(c: { adresse?: string | null; code_postal?: string | null; ville?: string | null } | null | undefined): string {
+  if (!c) return ''
+  return [c.adresse, c.code_postal, c.ville].filter((v) => v && v.trim()).join('\n')
+}
+
+export default function ModalExpedition({
+  mode,
+  expedition,
+  clients,
+  sousEnsembles,
+  expeditionsEnvoyees,
+  utilisateur,
+  onClose,
+  onSaved,
+}: Props) {
+  const [nom, setNom] = useState(expedition?.nom_destinataire ?? '')
+  const [prenom, setPrenom] = useState(expedition?.prenom_destinataire ?? '')
+  const [langue, setLangue] = useState<Langue | ''>(expedition?.langue ?? '')
+  const [adresse, setAdresse] = useState(adresseComplete(expedition))
+  const [pays, setPays] = useState(expedition?.pays ?? '')
+  const [clientIdSelectionne, setClientIdSelectionne] = useState<string | null>(expedition?.client_id ?? null)
+
+  // Choix exclusif : rechercher un client existant OU saisir manuellement
+  const [modeSaisieClient, setModeSaisieClient] = useState<'recherche' | 'manuel'>(
+    expedition?.client_id ? 'recherche' : 'manuel'
+  )
+
+  const [rechercheClient, setRechercheClient] = useState(
+    expedition?.clients ? `${expedition.clients.prenom} ${expedition.clients.nom}` : ''
+  )
+  const [dropdownClientOuvert, setDropdownClientOuvert] = useState(false)
+  const clientDropdownRef = useRef<HTMLDivElement>(null)
+
+  const [dropdownPaysOuvert, setDropdownPaysOuvert] = useState(false)
+  const paysDropdownRef = useRef<HTMLDivElement>(null)
+
+  const [versionCode, setVersionCode] = useState(expedition?.version_code ?? '')
+  const [categorie, setCategorie] = useState<CategorieExpedition | ''>(expedition?.categorie ?? '')
+  const [commentaire, setCommentaire] = useState(expedition?.commentaire ?? '')
+  const [transporteur, setTransporteur] = useState<Transporteur | ''>(expedition?.transporteur ?? '')
+  const [numeroSuivi, setNumeroSuivi] = useState(expedition?.numero_suivi ?? '')
+
+  const [rechercheSav, setRechercheSav] = useState('')
+  const [dropdownSavOuvert, setDropdownSavOuvert] = useState(false)
+  const savDropdownRef = useRef<HTMLDivElement>(null)
+
+  const [items, setItems] = useState<ExpeditionItem[]>(expedition?.items ?? [])
+
+  const [envoi, setEnvoi] = useState(false)
+  const [erreur, setErreur] = useState<string | null>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
+        setDropdownClientOuvert(false)
+      }
+      if (savDropdownRef.current && !savDropdownRef.current.contains(e.target as Node)) {
+        setDropdownSavOuvert(false)
+      }
+      if (paysDropdownRef.current && !paysDropdownRef.current.contains(e.target as Node)) {
+        setDropdownPaysOuvert(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const clientsFiltres = useMemo(() => {
+    if (!rechercheClient.trim()) return clients.slice(0, 8)
+    const q = rechercheClient.toLowerCase()
+    return clients.filter((c) => `${c.prenom} ${c.nom}`.toLowerCase().includes(q)).slice(0, 8)
+  }, [clients, rechercheClient])
+
+  const paysFiltres = useMemo(() => {
+    const q = pays.trim().toLowerCase()
+    if (!q) return PAYS.slice(0, 8)
+    return PAYS.filter((p) => p.nom.toLowerCase().startsWith(q) || p.code.toLowerCase() === q).slice(0, 8)
+  }, [pays])
+
+  // Recherche SAV : par client déjà renseigné, ou par numéro de série d'un colis déjà expédié
+  const resultatsSav = useMemo(() => {
+    if (!rechercheSav.trim()) return []
+    const q = rechercheSav.toLowerCase()
+    const parClient = clients
+      .filter((c) => `${c.prenom} ${c.nom}`.toLowerCase().includes(q))
+      .map((c) => ({
+        type: 'client' as const,
+        client: c as Client | null,
+        numeroSerie: null as string | null,
+        nomDest: undefined as string | undefined,
+        prenomDest: undefined as string | undefined,
+      }))
+    const parSerie = expeditionsEnvoyees
+      .filter((e) => e.numero_serie && e.numero_serie.toLowerCase().includes(q))
+      .map((e) => ({
+        type: 'serie' as const,
+        client: (e.clients ? clients.find((c) => c.id === e.clients!.id) ?? null : null) as Client | null,
+        numeroSerie: e.numero_serie as string | null,
+        nomDest: e.nom_destinataire as string | undefined,
+        prenomDest: e.prenom_destinataire as string | undefined,
+      }))
+    return [...parClient, ...parSerie].slice(0, 8)
+  }, [rechercheSav, clients, expeditionsEnvoyees])
+
+  function selectionnerClient(c: Client) {
+    setClientIdSelectionne(c.id)
+    setNom(c.nom)
+    setPrenom(c.prenom)
+    setLangue(c.langue ?? '')
+    setAdresse(adresseComplete(c))
+    setPays(c.pays ?? '')
+    setRechercheClient(`${c.prenom} ${c.nom}`)
+    setDropdownClientOuvert(false)
+  }
+
+  function selectionnerPays(code: string) {
+    setPays(code)
+    setDropdownPaysOuvert(false)
+  }
+
+  function selectionnerResultatSav(r: { client: Client | null; numeroSerie: string | null; nomDest?: string; prenomDest?: string }) {
+    if (r.client) {
+      selectionnerClient(r.client)
+    } else {
+      setNom(r.nomDest ?? '')
+      setPrenom(r.prenomDest ?? '')
+    }
+    if (r.numeroSerie) {
+      setRechercheSav(`${r.numeroSerie}`)
+    }
+    setDropdownSavOuvert(false)
+  }
+
+  const sousEnsemblesDisponibles = useMemo(
+    () => sousEnsembles.filter((se) => se.quantite > 0),
+    [sousEnsembles]
+  )
+
+  function quantiteSelectionnee(seId: string): number {
+    return items.find((i) => i.sous_ensemble_id === seId)?.quantite ?? 0
+  }
+
+  function ajusterItem(se: SousEnsemble, delta: number) {
+    setItems((prev) => {
+      const existant = prev.find((i) => i.sous_ensemble_id === se.id)
+      const actuelle = existant?.quantite ?? 0
+      const nouvelle = Math.max(0, Math.min(se.quantite, actuelle + delta))
+      if (nouvelle === 0) {
+        return prev.filter((i) => i.sous_ensemble_id !== se.id)
+      }
+      if (existant) {
+        return prev.map((i) => (i.sous_ensemble_id === se.id ? { ...i, quantite: nouvelle } : i))
+      }
+      return [...prev, { sous_ensemble_id: se.id, nom: se.nom, quantite: nouvelle }]
+    })
+  }
+
+  async function soumettre(e: React.FormEvent) {
+    e.preventDefault()
+    if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du destinataire requis'); return }
+    if (mode === 'finaliser' && !categorie) { setErreur('Veuillez choisir une catégorie de colis'); return }
+
+    setEnvoi(true)
+    setErreur(null)
+    try {
+      // Upsert / création du client si nécessaire
+      let clientId = modeSaisieClient === 'recherche' ? clientIdSelectionne : null
+      if (!clientId) {
+        const { data: nouveauClient, error: errClient } = await supabase
+          .from('clients')
+          .insert({
+            nom: nom.trim(),
+            prenom: prenom.trim(),
+            langue: langue || null,
+            adresse: adresse.trim() || null,
+            ville: null,
+            code_postal: null,
+            pays: pays.trim() || null,
+          })
+          .select('id')
+          .single()
+        if (errClient) throw errClient
+        clientId = nouveauClient?.id ?? null
+      } else {
+        await supabase
+          .from('clients')
+          .update({
+            nom: nom.trim(),
+            prenom: prenom.trim(),
+            langue: langue || null,
+            adresse: adresse.trim() || null,
+            ville: null,
+            code_postal: null,
+            pays: pays.trim() || null,
+          })
+          .eq('id', clientId)
+      }
+
+      const champsCommuns = {
+        client_id: clientId,
+        nom_destinataire: nom.trim(),
+        prenom_destinataire: prenom.trim(),
+        langue: langue || null,
+        adresse: adresse.trim() || null,
+        ville: null,
+        code_postal: null,
+        pays: pays.trim() || null,
+        version_code: versionCode.trim() || null,
+        categorie: categorie || null,
+        commentaire: commentaire.trim() || null,
+        transporteur: transporteur || null,
+        numero_suivi: numeroSuivi.trim() || null,
+      }
+
+      if (mode === 'creer') {
+        const { error } = await supabase.from('expeditions').insert({
+          ...champsCommuns,
+          statut: 'a_expedier',
+          origine: 'manuel',
+          items: [],
+          utilisateur_id: utilisateur.id,
+        })
+        if (error) throw error
+      } else if (mode === 'modifier' && expedition) {
+        const { error } = await supabase
+          .from('expeditions')
+          .update(champsCommuns)
+          .eq('id', expedition.id)
+        if (error) throw error
+      } else if (expedition) {
+        // Décompte du stock des sous-ensembles sélectionnés
+        for (const item of items) {
+          const se = sousEnsembles.find((s) => s.id === item.sous_ensemble_id)
+          if (!se) continue
+          const nouvelleQuantite = se.quantite - item.quantite
+          const { error: errSe } = await supabase
+            .from('sous_ensembles')
+            .update({ quantite: nouvelleQuantite })
+            .eq('id', se.id)
+          if (errSe) throw errSe
+
+          await creerOperation({
+            type: 'expedition',
+            sous_ensemble_id: se.id,
+            quantite_avant: se.quantite,
+            quantite_apres: nouvelleQuantite,
+            delta: -item.quantite,
+            utilisateur_id: utilisateur.id,
+            commentaire: `Expédition — ${prenom.trim()} ${nom.trim()}`,
+          })
+        }
+
+        // Génération du numéro de série si vente + colis terminé fermé
+        let numeroSerie: string | null = expedition.numero_serie ?? null
+        const contientColisFerme = items.some(
+          (i) => i.nom.trim().toLowerCase() === 'colis terminé fermé'
+        )
+        if (categorie === 'vente' && contientColisFerme && !numeroSerie) {
+          const { data: serieData, error: errSerie } = await supabase.rpc('generate_numero_serie')
+          if (errSerie) throw errSerie
+          numeroSerie = serieData as string
+        }
+
+        const { error } = await supabase
+          .from('expeditions')
+          .update({
+            ...champsCommuns,
+            statut: 'envoye',
+            items,
+            numero_serie: numeroSerie,
+            date_expedition: new Date().toISOString(),
+          })
+          .eq('id', expedition.id)
+        if (error) throw error
+      }
+
+      onSaved()
+      onClose()
+    } catch (err: unknown) {
+      setErreur(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+              {mode === 'creer' ? (
+                <PackagePlus size={17} className="text-primary-700" />
+              ) : mode === 'modifier' ? (
+                <Pencil size={17} className="text-primary-700" />
+              ) : (
+                <Send size={17} className="text-primary-700" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-primary-900 leading-tight">
+                {mode === 'creer' ? 'Nouvelle expédition' : mode === 'modifier' ? 'Modifier l\'expédition' : 'Finaliser l\'expédition'}
+              </h2>
+              <p className="text-xs text-primary-500 mt-0.5">
+                {mode === 'creer'
+                  ? 'Ajouter manuellement une commande à expédier'
+                  : mode === 'modifier'
+                    ? 'Modifier les informations de la commande'
+                    : 'Compléter les informations avant envoi'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-primary-700 transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <form onSubmit={soumettre} className="space-y-4">
+          {/* Choix exclusif : client existant OU saisie manuelle */}
+          <div className="grid grid-cols-2 gap-2 p-1 bg-primary-50 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setModeSaisieClient('recherche')}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                modeSaisieClient === 'recherche' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-700'
+              }`}
+            >
+              <UserSearch size={14} /> Client existant
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setModeSaisieClient('manuel')
+                setClientIdSelectionne(null)
+                setRechercheClient('')
+                setDropdownClientOuvert(false)
+              }}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                modeSaisieClient === 'manuel' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-700'
+              }`}
+            >
+              <UserPlus2 size={14} /> Nouveau client
+            </button>
+          </div>
+
+          {/* Recherche client existant */}
+          {modeSaisieClient === 'recherche' && (
+            <div ref={clientDropdownRef} className="relative">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Client
+              </label>
+              <div className="relative">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={rechercheClient}
+                  onChange={(e) => { setRechercheClient(e.target.value); setDropdownClientOuvert(true); setClientIdSelectionne(null) }}
+                  onFocus={() => setDropdownClientOuvert(true)}
+                  placeholder="Rechercher un client existant…"
+                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  autoComplete="off"
+                />
+              </div>
+              {dropdownClientOuvert && clientsFiltres.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {clientsFiltres.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => selectionnerClient(c)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 transition-colors text-left"
+                    >
+                      <span className="text-base flex-shrink-0">{drapeauPays(c.pays)}</span>
+                      <span className="flex-1 text-sm font-medium text-primary-900">{c.prenom} {c.nom}</span>
+                      <span className="text-xs text-primary-400 flex-shrink-0">{c.ville ?? ''}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {clientIdSelectionne && (
+                <p className="text-xs text-success-600 mt-1.5 flex items-center gap-1">
+                  Client sélectionné — les informations ci-dessous ont été pré-remplies.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Nom / prénom */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Prénom
+              </label>
+              <input
+                type="text"
+                value={prenom}
+                onChange={(e) => { setPrenom(e.target.value); setClientIdSelectionne(null) }}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Nom
+              </label>
+              <input
+                type="text"
+                value={nom}
+                onChange={(e) => { setNom(e.target.value); setClientIdSelectionne(null) }}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+          </div>
+
+          {/* Langue */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Langue
+            </label>
+            <select
+              value={langue}
+              onChange={(e) => setLangue(e.target.value as Langue | '')}
+              className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+            >
+              <option value="">—</option>
+              {LANGUES.map((l) => (
+                <option key={l.value} value={l.value}>{l.drapeau} {l.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Adresse — un seul champ pour permettre le copier-coller */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Adresse complète
+            </label>
+            <textarea
+              value={adresse}
+              onChange={(e) => setAdresse(e.target.value)}
+              rows={3}
+              placeholder="N° et rue, code postal, ville…"
+              className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
+            />
+          </div>
+
+          {/* Pays — sélection par autocomplétion avec drapeau */}
+          <div ref={paysDropdownRef} className="relative">
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Pays
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base pointer-events-none">
+                {drapeauPays(pays)}
+              </span>
+              <input
+                type="text"
+                value={pays}
+                onChange={(e) => { setPays(e.target.value); setDropdownPaysOuvert(true) }}
+                onFocus={() => setDropdownPaysOuvert(true)}
+                placeholder="Tapez les premières lettres…"
+                className="w-full pl-10 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                autoComplete="off"
+              />
+            </div>
+            {dropdownPaysOuvert && paysFiltres.length > 0 && (
+              <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                {paysFiltres.map((p) => (
+                  <button
+                    key={p.code}
+                    type="button"
+                    onClick={() => selectionnerPays(p.code)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 transition-colors text-left"
+                  >
+                    <span className="text-base flex-shrink-0">{drapeauPays(p.code)}</span>
+                    <span className="flex-1 text-sm font-medium text-primary-900">{p.nom}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Version code + catégorie */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Version du code
+              </label>
+              <div className="flex gap-1.5">
+                {VERSIONS_CODE.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setVersionCode(versionCode === v ? '' : v)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors border ${
+                      versionCode === v
+                        ? 'bg-primary-900 border-primary-900 text-white'
+                        : 'border-primary-200 text-primary-600 hover:bg-primary-50'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Catégorie de colis
+              </label>
+              <select
+                value={categorie}
+                onChange={(e) => setCategorie(e.target.value as CategorieExpedition | '')}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+              >
+                <option value="">—</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Recherche SAV */}
+          {categorie === 'sav' && (
+            <div ref={savDropdownRef} className="relative">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Client / colis d'origine (SAV)
+              </label>
+              <div className="relative">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={rechercheSav}
+                  onChange={(e) => { setRechercheSav(e.target.value); setDropdownSavOuvert(true) }}
+                  onFocus={() => setDropdownSavOuvert(true)}
+                  placeholder="Nom du client ou n° de série…"
+                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  autoComplete="off"
+                />
+              </div>
+              {dropdownSavOuvert && resultatsSav.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {resultatsSav.map((r, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => selectionnerResultatSav(r)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 transition-colors text-left"
+                    >
+                      <span className="flex-1 text-sm font-medium text-primary-900">
+                        {r.client ? `${r.client.prenom} ${r.client.nom}` : `${r.prenomDest ?? ''} ${r.nomDest ?? ''}`}
+                      </span>
+                      {r.numeroSerie && (
+                        <span className="text-xs text-primary-400 tabular-nums flex-shrink-0">{r.numeroSerie}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-primary-400 mt-1">
+                Sélectionnez un client/n° de série existant, ou renseignez simplement un nouveau client et un n° de suivi ci-dessous.
+              </p>
+            </div>
+          )}
+
+          {/* Sous-ensembles à décompter (uniquement en finalisation) */}
+          {mode === 'finaliser' && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Sous-ensembles en stock à expédier
+              </label>
+              {sousEnsemblesDisponibles.length === 0 ? (
+                <p className="text-xs text-primary-400 italic">Aucun sous-ensemble en stock</p>
+              ) : (
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                  {sousEnsemblesDisponibles.map((se) => {
+                    const qte = quantiteSelectionnee(se.id)
+                    return (
+                      <div
+                        key={se.id}
+                        className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
+                          <p className="text-[11px] text-primary-400 tabular-nums">Stock : {se.quantite}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => ajusterItem(se, -1)}
+                            disabled={qte === 0}
+                            className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
+                          >
+                            <Minus size={11} />
+                          </button>
+                          <span className="w-6 text-center text-sm font-bold tabular-nums text-primary-900">{qte}</span>
+                          <button
+                            type="button"
+                            onClick={() => ajusterItem(se, 1)}
+                            disabled={qte >= se.quantite}
+                            className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
+                          >
+                            <PlusIcon size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transporteur + suivi */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Transporteur
+              </label>
+              <select
+                value={transporteur}
+                onChange={(e) => setTransporteur(e.target.value as Transporteur | '')}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+              >
+                <option value="">—</option>
+                {TRANSPORTEURS.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                N° de suivi
+              </label>
+              <input
+                type="text"
+                value={numeroSuivi}
+                onChange={(e) => setNumeroSuivi(e.target.value)}
+                placeholder="Ex : 6A123..."
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+          </div>
+
+          {/* Commentaire */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Commentaire / instructions
+            </label>
+            <textarea
+              value={commentaire}
+              onChange={(e) => setCommentaire(e.target.value)}
+              rows={3}
+              placeholder="Détails de l'expédition, instructions du client…"
+              className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
+            />
+          </div>
+
+          {expedition?.numero_serie && (
+            <p className="text-xs text-primary-500">
+              N° de série : <span className="font-bold text-primary-800">{expedition.numero_serie}</span>
+            </p>
+          )}
+
+          {erreur && (
+            <p className="text-danger-600 bg-danger-100 rounded-xl p-3 text-sm">{erreur}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-primary-200 text-primary-700 text-sm font-medium rounded-xl hover:bg-primary-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={envoi || !nom.trim() || !prenom.trim()}
+              className="flex-1 py-2.5 bg-primary-900 hover:bg-primary-800 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              {envoi
+                ? 'Enregistrement…'
+                : mode === 'creer'
+                  ? 'Ajouter à la liste'
+                  : mode === 'modifier'
+                    ? 'Enregistrer les modifications'
+                    : 'Valider l\'expédition'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}

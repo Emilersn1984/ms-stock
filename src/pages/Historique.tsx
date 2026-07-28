@@ -28,6 +28,7 @@ const TYPE_LABELS: Record<TypeOperation, string> = {
   fabrication: 'Fabrication',
   correction: 'Correction',
   ajout_piece: 'Ajout pièce',
+  expedition: 'Expédition',
 }
 
 const TYPE_TEXT_CLASS: Record<TypeOperation, string> = {
@@ -35,6 +36,7 @@ const TYPE_TEXT_CLASS: Record<TypeOperation, string> = {
   fabrication: 'text-primary-600',
   correction: 'text-alert-600',
   ajout_piece: 'text-primary-500',
+  expedition: 'text-primary-700',
 }
 
 const TYPE_BAR_HEX: Record<TypeOperation, string> = {
@@ -42,6 +44,7 @@ const TYPE_BAR_HEX: Record<TypeOperation, string> = {
   fabrication: '#20808E',
   correction: '#F97316',
   ajout_piece: '#38A5B4',
+  expedition: '#1E3A5F',
 }
 
 function formatDate(iso: string): string {

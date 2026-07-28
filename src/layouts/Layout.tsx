@@ -1,7 +1,7 @@
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
 import { useUtilisateur } from '../hooks/useUtilisateur'
 import Header from '../components/Header'
-import { Home, Package, Truck, Settings, ClipboardList, ScrollText } from 'lucide-react'
+import { Home, Package, Truck, Settings, ClipboardList, ScrollText, Send } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 type NavItem = {
@@ -15,11 +15,12 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/stock', label: 'Stock', icon: Package },
   { to: '/nomenclature', label: 'Sous-ensembles', icon: ClipboardList },
   { to: '/commandes', label: 'Commandes', icon: Truck },
+  { to: '/expedition', label: 'Expédition', icon: Send },
   { to: '/fabrication', label: 'Fabrication', icon: Settings },
   { to: '/historique', label: 'Historique', icon: ScrollText },
 ]
 
-const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/historique']
+const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/expedition', '/historique']
 
 export default function Layout() {
   const { utilisateur, deconnecter } = useUtilisateur()
@@ -65,7 +66,7 @@ export default function Layout() {
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-primary-100 z-10">
-        <div className={`grid h-16 ${navItems.length === 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
+        <div className={`grid h-16 grid-cols-${navItems.length}`}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
