@@ -5,6 +5,7 @@ export const TRANSPORTEURS: { value: Transporteur; label: string }[] = [
   { value: 'chronopost', label: 'Chronopost' },
   { value: 'ups', label: 'UPS' },
   { value: 'dhl', label: 'DHL' },
+  { value: 'fedex', label: 'FedEx' },
   { value: 'gls', label: 'GLS' },
   { value: 'autre', label: 'Autre' },
 ]
@@ -22,6 +23,8 @@ export function buildTrackingUrl(transporteur: Transporteur | null, numeroSuivi:
       return `https://www.ups.com/track?loc=fr_FR&tracknum=${num}`
     case 'dhl':
       return `https://www.dhl.com/fr-fr/home/tracking/tracking-express.html?tracking-id=${num}`
+    case 'fedex':
+      return `https://www.fedex.com/fedextrack/?trknbr=${num}`
     case 'gls':
       return `https://gls-group.com/FR/fr/suivi-colis?match=${num}`
     default:

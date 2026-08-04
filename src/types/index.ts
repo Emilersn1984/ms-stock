@@ -50,7 +50,7 @@ export type Nomenclature = {
   quantite_requise: number
 }
 
-export type TypeOperation = 'livraison' | 'fabrication' | 'correction' | 'ajout_piece'
+export type TypeOperation = 'livraison' | 'fabrication' | 'correction' | 'ajout_piece' | 'expedition'
 
 export type Operation = {
   id: string
@@ -76,7 +76,7 @@ export type AlerteManuelle = {
 
 export type CouleurSeuil = 'rouge' | 'jaune' | 'vert'
 
-export type Transporteur = 'colissimo' | 'chronopost' | 'ups' | 'dhl' | 'gls' | 'autre'
+export type Transporteur = 'colissimo' | 'chronopost' | 'ups' | 'dhl' | 'fedex' | 'gls' | 'autre'
 
 export type StatutCommande = 'en_cours' | 'receptionnee'
 
@@ -93,4 +93,62 @@ export type Commande = {
   utilisateur_id: string | null
   created_at: string
   pieces?: { nom: string } | null
+}
+
+export type Langue = 'fr' | 'en' | 'de' | 'es' | 'it' | 'nl' | 'pt'
+
+export type CategorieExpedition = 'vente' | 'sav' | 'demo' | 'autre'
+
+export type StatutExpedition = 'a_expedier' | 'envoye' | 'receptionne'
+
+export type OrigineExpedition = 'manuel' | 'stripe'
+
+export type Client = {
+  id: string
+  nom: string
+  prenom: string
+  langue: Langue | null
+  adresse: string | null
+  ville: string | null
+  code_postal: string | null
+  pays: string | null
+  email: string | null
+  telephone: string | null
+  created_at: string
+}
+
+export type ExpeditionItem = {
+  sous_ensemble_id: string | null
+  piece_id: string | null
+  nom: string
+  quantite: number
+}
+
+export type Expedition = {
+  id: string
+  statut: StatutExpedition
+  origine: OrigineExpedition
+  stripe_session_id: string | null
+  client_id: string | null
+  nom_destinataire: string
+  prenom_destinataire: string
+  langue: Langue | null
+  adresse: string | null
+  ville: string | null
+  code_postal: string | null
+  pays: string | null
+  version_code: string | null
+  categorie: CategorieExpedition | null
+  commentaire: string | null
+  transporteur: Transporteur | null
+  numero_suivi: string | null
+  numero_serie: string | null
+  items: ExpeditionItem[]
+  date_commande: string
+  date_envoi_previsionnelle: string | null
+  date_expedition: string | null
+  date_reception: string | null
+  utilisateur_id: string | null
+  created_at: string
+  clients?: { id: string; nom: string; prenom: string } | null
 }

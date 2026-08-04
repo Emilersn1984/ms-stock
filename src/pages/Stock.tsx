@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ChevronDown, Search, Plus, Pencil } from 'lucide-react'
+import { ChevronDown, Search, Plus, Pencil, ArrowUpDown, RotateCcw } from 'lucide-react'
 import PhotoLightbox from '../components/PhotoLightbox'
 import AnimatedList from '../components/AnimatedList'
 import { supabase } from '../lib/supabase'
@@ -218,7 +218,8 @@ function KpiStrip({ rouge, jaune, vert }: { rouge: number; jaune: number; vert: 
 
 export default function Stock() {
   const { pieces, chargement, erreur } = useStock()
-  const { sousEnsembles: sousEnsemblesEnStock } = useSousEnsemblesStock()
+  const { sousEnsembles: sousEnsemblesTous } = useSousEnsemblesStock()
+  const sousEnsemblesEnStock = sousEnsemblesTous.filter((se) => se.quantite > 0)
   const utilisateur = getUtilisateurStored()
 
   const [recherche, setRecherche] = useState('')
@@ -299,6 +300,15 @@ export default function Stock() {
 
   const basculerTri = (colonne: 'quantite' | 'delai' | 'statut') => {
     setTriColonne((prev) => (prev === colonne ? null : colonne))
+  }
+
+  const filtresActifs = !!(recherche || categorieFiltre || sousSystemeFiltre || filtreNonAttribuees)
+
+  const reinitialiserFiltres = () => {
+    setRecherche('')
+    setCategorieFiltre(null)
+    setSousSystemeFiltre(null)
+    setFiltreNonAttribuees(false)
   }
 
   const stats = useMemo(() => {
@@ -519,6 +529,16 @@ export default function Stock() {
         >
           Pièces non attribuées
         </button>
+
+        {filtresActifs && (
+          <button
+            onClick={reinitialiserFiltres}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary-500 hover:text-primary-800 hover:bg-primary-50 transition-colors border border-transparent"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Réinitialiser les filtres
+          </button>
+        )}
       </div>
 
       {/* État vide */}
@@ -543,34 +563,49 @@ export default function Stock() {
                     <th className="px-5 py-3.5 text-right">
                       <button
                         onClick={() => basculerTri('quantite')}
-                        className={`flex items-center justify-end gap-1 w-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
-                          triColonne === 'quantite' ? 'text-primary-900' : 'text-primary-600 hover:text-primary-800'
+                        title="Trier par quantité (les plus critiques en premier)"
+                        className={`inline-flex items-center justify-end gap-1 -mx-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                          triColonne === 'quantite'
+                            ? 'bg-primary-100 text-primary-900'
+                            : 'text-primary-600 hover:bg-primary-100 hover:text-primary-800'
                         }`}
                       >
                         Quantité
-                        {triColonne === 'quantite' && <ChevronDown className="w-3 h-3 rotate-180" />}
+                        {triColonne === 'quantite'
+                          ? <ChevronDown className="w-3 h-3" />
+                          : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                       </button>
                     </th>
                     <th className="px-5 py-3.5 text-center">
                       <button
                         onClick={() => basculerTri('delai')}
-                        className={`flex items-center justify-center gap-1 w-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
-                          triColonne === 'delai' ? 'text-primary-900' : 'text-primary-600 hover:text-primary-800'
+                        title="Trier par délai d'appro (le plus court en premier)"
+                        className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                          triColonne === 'delai'
+                            ? 'bg-primary-100 text-primary-900'
+                            : 'text-primary-600 hover:bg-primary-100 hover:text-primary-800'
                         }`}
                       >
                         Délai appro
-                        {triColonne === 'delai' && <ChevronDown className="w-3 h-3 rotate-180" />}
+                        {triColonne === 'delai'
+                          ? <ChevronDown className="w-3 h-3" />
+                          : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                       </button>
                     </th>
                     <th className="px-5 py-3.5 text-center">
                       <button
                         onClick={() => basculerTri('statut')}
-                        className={`flex items-center justify-center gap-1 w-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
-                          triColonne === 'statut' ? 'text-primary-900' : 'text-primary-600 hover:text-primary-800'
+                        title="Trier par statut (critique en premier)"
+                        className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                          triColonne === 'statut'
+                            ? 'bg-primary-100 text-primary-900'
+                            : 'text-primary-600 hover:bg-primary-100 hover:text-primary-800'
                         }`}
                       >
                         Statut
-                        {triColonne === 'statut' && <ChevronDown className="w-3 h-3 rotate-180" />}
+                        {triColonne === 'statut'
+                          ? <ChevronDown className="w-3 h-3" />
+                          : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                       </button>
                     </th>
                     <th className="px-5 py-3.5" />

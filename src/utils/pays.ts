@@ -1,0 +1,162 @@
+export type Pays = { code: string; nom: string }
+
+// Liste des pays (code ISO 3166-1 alpha-2 + nom en français)
+export const PAYS: Pays[] = [
+  { code: 'FR', nom: 'France' },
+  { code: 'BE', nom: 'Belgique' },
+  { code: 'CH', nom: 'Suisse' },
+  { code: 'LU', nom: 'Luxembourg' },
+  { code: 'DE', nom: 'Allemagne' },
+  { code: 'ES', nom: 'Espagne' },
+  { code: 'IT', nom: 'Italie' },
+  { code: 'PT', nom: 'Portugal' },
+  { code: 'NL', nom: 'Pays-Bas' },
+  { code: 'GB', nom: 'Royaume-Uni' },
+  { code: 'IE', nom: 'Irlande' },
+  { code: 'AT', nom: 'Autriche' },
+  { code: 'DK', nom: 'Danemark' },
+  { code: 'SE', nom: 'Suède' },
+  { code: 'NO', nom: 'Norvège' },
+  { code: 'FI', nom: 'Finlande' },
+  { code: 'IS', nom: 'Islande' },
+  { code: 'PL', nom: 'Pologne' },
+  { code: 'CZ', nom: 'République tchèque' },
+  { code: 'SK', nom: 'Slovaquie' },
+  { code: 'HU', nom: 'Hongrie' },
+  { code: 'RO', nom: 'Roumanie' },
+  { code: 'BG', nom: 'Bulgarie' },
+  { code: 'GR', nom: 'Grèce' },
+  { code: 'HR', nom: 'Croatie' },
+  { code: 'SI', nom: 'Slovénie' },
+  { code: 'EE', nom: 'Estonie' },
+  { code: 'LV', nom: 'Lettonie' },
+  { code: 'LT', nom: 'Lituanie' },
+  { code: 'MT', nom: 'Malte' },
+  { code: 'CY', nom: 'Chypre' },
+  { code: 'MC', nom: 'Monaco' },
+  { code: 'AD', nom: 'Andorre' },
+  { code: 'LI', nom: 'Liechtenstein' },
+  { code: 'SM', nom: 'Saint-Marin' },
+  { code: 'VA', nom: 'Vatican' },
+  { code: 'UA', nom: 'Ukraine' },
+  { code: 'RS', nom: 'Serbie' },
+  { code: 'ME', nom: 'Monténégro' },
+  { code: 'MK', nom: 'Macédoine du Nord' },
+  { code: 'AL', nom: 'Albanie' },
+  { code: 'BA', nom: 'Bosnie-Herzégovine' },
+  { code: 'MD', nom: 'Moldavie' },
+  { code: 'BY', nom: 'Biélorussie' },
+  { code: 'RU', nom: 'Russie' },
+  { code: 'TR', nom: 'Turquie' },
+  { code: 'US', nom: 'États-Unis' },
+  { code: 'CA', nom: 'Canada' },
+  { code: 'MX', nom: 'Mexique' },
+  { code: 'BR', nom: 'Brésil' },
+  { code: 'AR', nom: 'Argentine' },
+  { code: 'CL', nom: 'Chili' },
+  { code: 'CO', nom: 'Colombie' },
+  { code: 'PE', nom: 'Pérou' },
+  { code: 'UY', nom: 'Uruguay' },
+  { code: 'VE', nom: 'Venezuela' },
+  { code: 'EC', nom: 'Équateur' },
+  { code: 'BO', nom: 'Bolivie' },
+  { code: 'PY', nom: 'Paraguay' },
+  { code: 'CR', nom: 'Costa Rica' },
+  { code: 'PA', nom: 'Panama' },
+  { code: 'CU', nom: 'Cuba' },
+  { code: 'DO', nom: 'République dominicaine' },
+  { code: 'JM', nom: 'Jamaïque' },
+  { code: 'MA', nom: 'Maroc' },
+  { code: 'TN', nom: 'Tunisie' },
+  { code: 'DZ', nom: 'Algérie' },
+  { code: 'EG', nom: 'Égypte' },
+  { code: 'LY', nom: 'Libye' },
+  { code: 'SN', nom: 'Sénégal' },
+  { code: 'CI', nom: "Côte d'Ivoire" },
+  { code: 'CM', nom: 'Cameroun' },
+  { code: 'ML', nom: 'Mali' },
+  { code: 'BF', nom: 'Burkina Faso' },
+  { code: 'NE', nom: 'Niger' },
+  { code: 'TG', nom: 'Togo' },
+  { code: 'BJ', nom: 'Bénin' },
+  { code: 'GA', nom: 'Gabon' },
+  { code: 'CG', nom: 'Congo' },
+  { code: 'CD', nom: 'République démocratique du Congo' },
+  { code: 'MG', nom: 'Madagascar' },
+  { code: 'RE', nom: 'La Réunion' },
+  { code: 'GP', nom: 'Guadeloupe' },
+  { code: 'MQ', nom: 'Martinique' },
+  { code: 'GF', nom: 'Guyane' },
+  { code: 'YT', nom: 'Mayotte' },
+  { code: 'NC', nom: 'Nouvelle-Calédonie' },
+  { code: 'PF', nom: 'Polynésie française' },
+  { code: 'ZA', nom: 'Afrique du Sud' },
+  { code: 'NG', nom: 'Nigéria' },
+  { code: 'KE', nom: 'Kenya' },
+  { code: 'GH', nom: 'Ghana' },
+  { code: 'ET', nom: 'Éthiopie' },
+  { code: 'TZ', nom: 'Tanzanie' },
+  { code: 'CN', nom: 'Chine' },
+  { code: 'JP', nom: 'Japon' },
+  { code: 'KR', nom: 'Corée du Sud' },
+  { code: 'IN', nom: 'Inde' },
+  { code: 'PK', nom: 'Pakistan' },
+  { code: 'BD', nom: 'Bangladesh' },
+  { code: 'ID', nom: 'Indonésie' },
+  { code: 'TH', nom: 'Thaïlande' },
+  { code: 'VN', nom: 'Vietnam' },
+  { code: 'PH', nom: 'Philippines' },
+  { code: 'MY', nom: 'Malaisie' },
+  { code: 'SG', nom: 'Singapour' },
+  { code: 'TW', nom: 'Taïwan' },
+  { code: 'HK', nom: 'Hong Kong' },
+  { code: 'KH', nom: 'Cambodge' },
+  { code: 'LA', nom: 'Laos' },
+  { code: 'MM', nom: 'Myanmar' },
+  { code: 'NP', nom: 'Népal' },
+  { code: 'LK', nom: 'Sri Lanka' },
+  { code: 'AE', nom: 'Émirats arabes unis' },
+  { code: 'SA', nom: 'Arabie saoudite' },
+  { code: 'QA', nom: 'Qatar' },
+  { code: 'KW', nom: 'Koweït' },
+  { code: 'BH', nom: 'Bahreïn' },
+  { code: 'OM', nom: 'Oman' },
+  { code: 'IL', nom: 'Israël' },
+  { code: 'JO', nom: 'Jordanie' },
+  { code: 'LB', nom: 'Liban' },
+  { code: 'IQ', nom: 'Irak' },
+  { code: 'IR', nom: 'Iran' },
+  { code: 'AF', nom: 'Afghanistan' },
+  { code: 'KZ', nom: 'Kazakhstan' },
+  { code: 'GE', nom: 'Géorgie' },
+  { code: 'AM', nom: 'Arménie' },
+  { code: 'AZ', nom: 'Azerbaïdjan' },
+  { code: 'AU', nom: 'Australie' },
+  { code: 'NZ', nom: 'Nouvelle-Zélande' },
+]
+
+export function trouverPays(codeOuNom: string | null | undefined): Pays | null {
+  if (!codeOuNom) return null
+  const q = codeOuNom.trim().toLowerCase()
+  return (
+    PAYS.find((p) => p.code.toLowerCase() === q) ??
+    PAYS.find((p) => p.nom.toLowerCase() === q) ??
+    null
+  )
+}
+
+export function drapeauPays(codeOuNom: string | null | undefined): string {
+  const pays = trouverPays(codeOuNom)
+  const code = pays?.code ?? (codeOuNom && codeOuNom.length === 2 ? codeOuNom.toUpperCase() : null)
+  if (!code) return '🏳️'
+  const points = code
+    .toUpperCase()
+    .split('')
+    .map((c) => 127397 + c.charCodeAt(0))
+  return String.fromCodePoint(...points)
+}
+
+export function nomPays(codeOuNom: string | null | undefined): string {
+  const pays = trouverPays(codeOuNom)
+  return pays?.nom ?? codeOuNom ?? ''
+}

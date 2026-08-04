@@ -10,7 +10,6 @@ export function useSousEnsemblesStock() {
     const { data } = await supabase
       .from('sous_ensembles')
       .select('*')
-      .gt('quantite', 0)
       .order('nom', { ascending: true })
     setSousEnsembles((data as SousEnsemble[]) ?? [])
     setChargement(false)

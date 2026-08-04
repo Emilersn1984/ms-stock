@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Truck, Check, AlertCircle, Plus, PackageSearch, X, Trash2 } from 'lucide-react'
+import { Truck, Check, AlertCircle, Plus, PackageSearch, Pencil, X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { useCommandes } from '../hooks/useCommandes'
-import { useProductionHebdo } from '../hooks/useProductionHebdo'
+import { useParametreProduction } from '../hooks/useParametreProduction'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { creerOperation } from '../utils/creerOperation'
 import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
 import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
+import { calcBesoinPieces } from '../utils/calcDisponibilite'
 import { buildTrackingUrl, TRANSPORTEURS } from '../utils/trackingUrl'
 import ModalNouvelleCommande from '../components/ModalNouvelleCommande'
-import { Piece, Commande, Transporteur } from '../types'
+import { Piece, Commande, Transporteur, SousEnsemble } from '../types'
 
 type NomEntry = {
   piece_id: string | null
@@ -93,12 +94,14 @@ function CommandeCard({
   onMarquerRecu,
   onMettreAJourSuivi,
   onSupprimer,
+  onModifier,
   chargement,
 }: {
   commande: Commande
   onMarquerRecu: () => void
   onMettreAJourSuivi: (transporteur: Transporteur, numeroSuivi: string) => Promise<void>
   onSupprimer: () => Promise<void>
+  onModifier: () => void
   chargement: boolean
 }) {
   const suiviManquant = !commande.numero_suivi
@@ -253,9 +256,17 @@ function CommandeCard({
             </button>
             <button
               type="button"
+              onClick={onModifier}
+              title="Modifier la commande"
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-primary-700 hover:bg-primary-100 transition-colors ml-auto"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              type="button"
               onClick={() => setConfirmSuppr(true)}
               title="Supprimer la commande"
-              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors ml-auto"
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-danger-500 hover:bg-danger-100 transition-colors"
             >
               <Trash2 size={13} />
             </button>
@@ -299,31 +310,44 @@ function CommandeRecueRow({ commande }: { commande: Commande }) {
 export default function Commandes() {
   const { pieces, chargement: chargementStock, recharger: rechargerPieces } = useStock()
   const { commandesEnCours, commandesRecues, chargement: chargementCommandes, recharger: rechargerCommandes } = useCommandes()
-  const { consommationMoyenne, chargement: chargementProd } = useProductionHebdo()
+  const { colisParSemaine, chargement: chargementParam } = useParametreProduction()
   const utilisateur = getUtilisateurStored()
 
   const [nomenclature, setNomenclature] = useState<NomEntry[]>([])
+  const [sousEnsembles, setSousEnsembles] = useState<SousEnsemble[]>([])
   const [chargementNom, setChargementNom] = useState(true)
 
   const [modalOuvert, setModalOuvert] = useState(false)
   const [pieceModal, setPieceModal] = useState<Piece | null>(null)
+  const [commandeEnEdition, setCommandeEnEdition] = useState<Commande | null>(null)
   const [receptionEnCours, setReceptionEnCours] = useState<string | null>(null)
   const [erreurReception, setErreurReception] = useState<string | null>(null)
 
   useEffect(() => {
     async function charger() {
-      const { data } = await supabase
-        .from('nomenclature')
-        .select('piece_id, sous_ensemble_id, sous_ensemble_enfant_id, quantite_requise')
-      setNomenclature((data as NomEntry[]) ?? [])
+      const [{ data: nomData }, { data: seData }] = await Promise.all([
+        supabase.from('nomenclature').select('piece_id, sous_ensemble_id, sous_ensemble_enfant_id, quantite_requise'),
+        supabase.from('sous_ensembles').select('*'),
+      ])
+      setNomenclature((nomData as NomEntry[]) ?? [])
+      setSousEnsembles((seData as SousEnsemble[]) ?? [])
       setChargementNom(false)
     }
     charger()
   }, [])
 
-  const nomenclaturePieces = useMemo(
-    () => nomenclature.filter((n): n is NomEntry & { piece_id: string } => n.piece_id !== null),
-    [nomenclature]
+  const colisTermineFermeId = useMemo(
+    () => sousEnsembles.find((se) => se.nom.trim().toLowerCase() === 'colis terminé fermé')?.id ?? null,
+    [sousEnsembles]
+  )
+
+  // Besoin en pièces dérivé uniquement de la valeur "Colis terminé fermé / semaine"
+  // réglée à la main (Tableau de bord), via l'explosion complète de la
+  // nomenclature (BOM). Les productions déclarées dans l'onglet Fabrication
+  // sont ignorées.
+  const consommationParPiece = useMemo(
+    () => (colisTermineFermeId ? calcBesoinPieces(colisTermineFermeId, colisParSemaine, nomenclature) : new Map<string, number>()),
+    [colisTermineFermeId, colisParSemaine, nomenclature]
   )
 
   const piecesDejaCommandees = useMemo(
@@ -332,19 +356,27 @@ export default function Commandes() {
   )
 
   const achatsRecommandes = useMemo(
-    () => calcAchatsRecommandes(pieces, nomenclaturePieces, consommationMoyenne)
+    () => calcAchatsRecommandes(pieces, consommationParPiece)
       .filter((a) => !piecesDejaCommandees.has(a.piece.id)),
-    [pieces, nomenclaturePieces, consommationMoyenne, piecesDejaCommandees]
+    [pieces, consommationParPiece, piecesDejaCommandees]
   )
 
   function ouvrirModal(piece: Piece | null) {
     setPieceModal(piece)
+    setCommandeEnEdition(null)
+    setModalOuvert(true)
+  }
+
+  function ouvrirModalEdition(commande: Commande) {
+    setPieceModal(null)
+    setCommandeEnEdition(commande)
     setModalOuvert(true)
   }
 
   function fermerModal() {
     setModalOuvert(false)
     setPieceModal(null)
+    setCommandeEnEdition(null)
   }
 
   async function marquerRecu(commande: Commande) {
@@ -418,7 +450,7 @@ export default function Commandes() {
     [commandesRecues]
   )
 
-  const chargement = chargementStock || chargementCommandes || chargementProd || chargementNom
+  const chargement = chargementStock || chargementCommandes || chargementParam || chargementNom
 
   if (!utilisateur) {
     return (
@@ -497,6 +529,7 @@ export default function Commandes() {
                     onMarquerRecu={() => marquerRecu(c)}
                     onMettreAJourSuivi={(transporteur, numeroSuivi) => mettreAJourSuivi(c, transporteur, numeroSuivi)}
                     onSupprimer={() => supprimerCommande(c)}
+                    onModifier={() => ouvrirModalEdition(c)}
                     chargement={receptionEnCours === c.id}
                   />
                 ))}
@@ -530,6 +563,7 @@ export default function Commandes() {
           piece={pieceModal}
           pieces={pieces}
           utilisateur={utilisateur}
+          commandeAModifier={commandeEnEdition}
           onClose={fermerModal}
           onCreated={rechargerCommandes}
         />

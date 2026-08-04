@@ -1,6 +1,5 @@
 import { Piece } from '../types'
 import { getCouleurSeuil } from './couleurSeuil'
-import type { ProductionHebdo } from '../hooks/useProductionHebdo'
 
 export type NiveauUrgence = 'critique' | 'commander'
 
@@ -12,35 +11,19 @@ export type AchatRecommande = {
   source: 'predictive' | 'seuil'
 }
 
-type NomEntry = {
-  piece_id: string
-  sous_ensemble_id: string
-  quantite_requise: number
-}
-
+// consommationParPiece : piece_id -> quantité consommée par semaine, dérivée
+// uniquement de la valeur de production réglée à la main (voir calcBesoinPieces).
 export function calcAchatsRecommandes(
   pieces: Piece[],
-  nomenclature: NomEntry[],
-  productions: ProductionHebdo[],
+  consommationParPiece: Map<string, number>,
 ): AchatRecommande[] {
-  const productionMap: Record<string, number> = {}
-  for (const p of productions) {
-    productionMap[p.sous_ensemble_id] = p.quantite
-  }
-
   const results: AchatRecommande[] = []
 
   for (const piece of pieces) {
     if (piece.est_impression_3d) continue
 
     if (piece.delai_appro != null) {
-      let consommationHebdo = 0
-      for (const entry of nomenclature) {
-        if (entry.piece_id === piece.id) {
-          const prod = productionMap[entry.sous_ensemble_id] ?? 0
-          consommationHebdo += entry.quantite_requise * prod
-        }
-      }
+      const consommationHebdo = consommationParPiece.get(piece.id) ?? 0
 
       if (consommationHebdo === 0) {
         const couleur = getCouleurSeuil(piece)
