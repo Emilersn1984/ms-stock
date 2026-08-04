@@ -142,30 +142,35 @@ function CarteEnvoyee({
           </span>
           {expedition.version_code && <span className="text-primary-400">{expedition.version_code}</span>}
           {expedition.langue && <span>{drapeauLangue(expedition.langue)}</span>}
-          {urlSuivi && (
-            <a
-              href={urlSuivi}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-primary-600 hover:text-primary-900 font-medium"
-            >
-              <Truck size={11} /> Suivi
-            </a>
-          )}
           {expedition.numero_serie && (
             <span className="font-bold text-primary-700">{expedition.numero_serie}</span>
           )}
         </div>
-        {onReceptionner && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onReceptionner() }}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-success-600 hover:text-success-700 transition-colors px-2.5 py-1.5 rounded-lg border border-success-300 hover:bg-success-50"
-          >
-            <CheckCircle2 size={13} />
-            Marquer reçu
-          </button>
+        {(urlSuivi || onReceptionner) && (
+          <div className="flex items-center gap-2 mt-2">
+            {urlSuivi && (
+              <a
+                href={urlSuivi}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-900 transition-colors px-2.5 py-1.5 rounded-lg border border-primary-200 hover:bg-primary-50"
+              >
+                <Truck size={12} />
+                Suivre le colis
+              </a>
+            )}
+            {onReceptionner && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onReceptionner() }}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-success-600 hover:text-success-700 transition-colors px-2.5 py-1.5 rounded-lg border border-success-300 hover:bg-success-50"
+              >
+                <CheckCircle2 size={13} />
+                Marquer reçu
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -254,11 +259,11 @@ export default function ExpeditionPage() {
       if (filtreVersion && e.version_code !== filtreVersion) return false
       if (filtreLangue && e.langue !== filtreLangue) return false
       if (filtreCategorie && e.categorie !== filtreCategorie) return false
-      if (filtreDateDebut && (!e.date_expedition || new Date(e.date_expedition) < new Date(filtreDateDebut))) return false
+      if (filtreDateDebut && (!e.date_reception || new Date(e.date_reception) < new Date(filtreDateDebut))) return false
       if (filtreDateFin) {
         const fin = new Date(filtreDateFin)
         fin.setHours(23, 59, 59, 999)
-        if (!e.date_expedition || new Date(e.date_expedition) > fin) return false
+        if (!e.date_reception || new Date(e.date_reception) > fin) return false
       }
       return true
     })
@@ -464,7 +469,7 @@ export default function ExpeditionPage() {
 
             <div className="lg:col-span-2">
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                Date d'expédition
+                Date de réception
               </label>
               <div className="flex gap-2">
                 <input
@@ -505,7 +510,7 @@ export default function ExpeditionPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
                     <tr>
-                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Date</th>
+                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Date réception</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Client</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Catégorie</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Version</th>
@@ -519,7 +524,7 @@ export default function ExpeditionPage() {
                     {historiqueFiltre.map((e) => (
                       <tr key={e.id} className="hover:bg-primary-50 transition-colors">
                         <td className="px-4 py-3 text-xs text-primary-500 whitespace-nowrap">
-                          {e.date_expedition ? new Date(e.date_expedition).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                          {e.date_reception ? new Date(e.date_reception).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                         </td>
                         <td className="px-4 py-3 font-medium text-primary-900">
                           {e.prenom_destinataire} {e.nom_destinataire}

@@ -86,6 +86,10 @@ export default function ModalExpedition({
   const savDropdownRef = useRef<HTMLDivElement>(null)
 
   const [items, setItems] = useState<ExpeditionItem[]>(expedition?.items ?? [])
+  const [rechercheItem, setRechercheItem] = useState('')
+
+  const [numeroSerie, setNumeroSerie] = useState(expedition?.numero_serie ?? '')
+  const isAdmin = utilisateur.role === 'patron'
 
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -183,6 +187,18 @@ export default function ModalExpedition({
     const idsReserves = new Set(items.filter((i) => i.piece_id).map((i) => i.piece_id as string))
     return pieces.filter((p) => p.quantite > 0 || idsReserves.has(p.id))
   }, [pieces, items])
+
+  const sousEnsemblesFiltres = useMemo(() => {
+    if (!rechercheItem.trim()) return sousEnsemblesDisponibles
+    const q = rechercheItem.toLowerCase()
+    return sousEnsemblesDisponibles.filter((se) => se.nom.toLowerCase().includes(q))
+  }, [sousEnsemblesDisponibles, rechercheItem])
+
+  const piecesFiltrees = useMemo(() => {
+    if (!rechercheItem.trim()) return piecesDisponibles
+    const q = rechercheItem.toLowerCase()
+    return piecesDisponibles.filter((p) => p.nom.toLowerCase().includes(q))
+  }, [piecesDisponibles, rechercheItem])
 
   function quantiteSousEnsemble(seId: string): number {
     return items.find((i) => i.sous_ensemble_id === seId)?.quantite ?? 0
@@ -351,7 +367,11 @@ export default function ModalExpedition({
 
         const { error } = await supabase
           .from('expeditions')
-          .update({ ...champsCommuns, items })
+          .update({
+            ...champsCommuns,
+            items,
+            ...(isAdmin ? { numero_serie: numeroSerie.trim() || null } : {}),
+          })
           .eq('id', expedition.id)
         if (error) throw error
       } else if (expedition) {
@@ -399,14 +419,15 @@ export default function ModalExpedition({
         }
 
         // Génération du numéro de série si vente + colis terminé fermé
-        let numeroSerie: string | null = expedition.numero_serie ?? null
+        // (l'admin peut avoir déjà saisi un numéro manuellement dans le champ dédié)
+        let numeroSerieFinal: string | null = numeroSerie.trim() || expedition.numero_serie || null
         const contientColisFerme = items.some(
           (i) => i.nom.trim().toLowerCase() === 'colis terminé fermé'
         )
-        if (categorie === 'vente' && contientColisFerme && !numeroSerie) {
+        if (categorie === 'vente' && contientColisFerme && !numeroSerieFinal) {
           const { data: serieData, error: errSerie } = await supabase.rpc('generate_numero_serie')
           if (errSerie) throw errSerie
-          numeroSerie = serieData as string
+          numeroSerieFinal = serieData as string
         }
 
         const { error } = await supabase
@@ -415,7 +436,7 @@ export default function ModalExpedition({
             ...champsCommuns,
             statut: 'envoye',
             items,
-            numero_serie: numeroSerie,
+            numero_serie: numeroSerieFinal,
             date_expedition: new Date().toISOString(),
           })
           .eq('id', expedition.id)
@@ -715,15 +736,28 @@ export default function ModalExpedition({
           {/* Contenu du colis : sous-ensembles + pièces du stock classique */}
           {editionContenuAutorisee && (
             <div className="space-y-4">
+              <div className="relative">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={rechercheItem}
+                  onChange={(e) => setRechercheItem(e.target.value)}
+                  placeholder="Rechercher un élément du stock…"
+                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  autoComplete="off"
+                />
+              </div>
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                   Sous-ensembles {mode === 'modifier' ? 'du colis' : 'en stock à expédier'}
                 </label>
-                {sousEnsemblesDisponibles.length === 0 ? (
-                  <p className="text-xs text-primary-400 italic">Aucun sous-ensemble en stock</p>
+                {sousEnsemblesFiltres.length === 0 ? (
+                  <p className="text-xs text-primary-400 italic">
+                    {rechercheItem.trim() ? 'Aucun résultat' : 'Aucun sous-ensemble en stock'}
+                  </p>
                 ) : (
                   <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                    {sousEnsemblesDisponibles.map((se) => {
+                    {sousEnsemblesFiltres.map((se) => {
                       const qte = quantiteSousEnsemble(se.id)
                       const max = se.quantite + qte
                       return (
@@ -765,11 +799,13 @@ export default function ModalExpedition({
                 <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                   Pièces du stock classique (mousqueton, dyneema…)
                 </label>
-                {piecesDisponibles.length === 0 ? (
-                  <p className="text-xs text-primary-400 italic">Aucune pièce en stock</p>
+                {piecesFiltrees.length === 0 ? (
+                  <p className="text-xs text-primary-400 italic">
+                    {rechercheItem.trim() ? 'Aucun résultat' : 'Aucune pièce en stock'}
+                  </p>
                 ) : (
                   <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                    {piecesDisponibles.map((p) => {
+                    {piecesFiltrees.map((p) => {
                       const qte = quantitePiece(p.id)
                       const max = p.quantite + qte
                       return (
@@ -854,11 +890,24 @@ export default function ModalExpedition({
             />
           </div>
 
-          {expedition?.numero_serie && (
+          {isAdmin && (mode === 'modifier' || (mode === 'finaliser' && categorie === 'vente')) ? (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                N° de série {mode === 'finaliser' ? '(laisser vide pour génération automatique)' : ''}
+              </label>
+              <input
+                type="text"
+                value={numeroSerie}
+                onChange={(e) => setNumeroSerie(e.target.value)}
+                placeholder="Généré automatiquement si vide"
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+          ) : expedition?.numero_serie ? (
             <p className="text-xs text-primary-500">
               N° de série : <span className="font-bold text-primary-800">{expedition.numero_serie}</span>
             </p>
-          )}
+          ) : null}
 
           {erreur && (
             <p className="text-danger-600 bg-danger-100 rounded-xl p-3 text-sm">{erreur}</p>

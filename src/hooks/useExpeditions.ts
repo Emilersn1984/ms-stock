@@ -52,10 +52,10 @@ export function useExpeditions() {
     })
 
   const historique = expeditions
-    .filter((e) => e.statut === 'envoye' || e.statut === 'receptionne')
+    .filter((e) => e.statut === 'receptionne')
     .sort((a, b) => {
-      const dA = a.date_expedition ? new Date(a.date_expedition).getTime() : 0
-      const dB = b.date_expedition ? new Date(b.date_expedition).getTime() : 0
+      const dA = a.date_reception ? new Date(a.date_reception).getTime() : 0
+      const dB = b.date_reception ? new Date(b.date_reception).getTime() : 0
       return dB - dA
     })
 
