@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2 } from 'lucide-react'
+import { Plus, Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2, Undo2, CalendarClock } from 'lucide-react'
 import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
 import { useStock } from '../hooks/useStock'
 import { useClients } from '../hooks/useClients'
@@ -10,6 +10,7 @@ import { buildTrackingUrl } from '../utils/trackingUrl'
 import { supabase } from '../lib/supabase'
 import ModalExpedition from '../components/ModalExpedition'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { creerOperation } from '../utils/creerOperation'
 import { Expedition, CategorieExpedition, Transporteur, Langue } from '../types'
 
 function SectionLabel({ texte, accent, count }: { texte: string; accent?: string; count?: number | string }) {
@@ -103,6 +104,12 @@ function CarteAExpedier({
           <span className={`flex items-center gap-1 font-medium ${expedition.origine === 'stripe' ? 'text-primary-600' : 'text-primary-400'}`}>
             {expedition.origine === 'stripe' ? <><ShoppingBag size={11} /> Stripe</> : 'Ajout manuel'}
           </span>
+          {expedition.date_envoi_previsionnelle && (
+            <span className="flex items-center gap-1 text-alert-600 font-medium">
+              <CalendarClock size={11} />
+              {new Date(expedition.date_envoi_previsionnelle).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -114,11 +121,13 @@ function CarteEnvoyee({
   onModifier,
   onSupprimer,
   onReceptionner,
+  onRenvoyer,
 }: {
   expedition: Expedition
   onModifier?: () => void
   onSupprimer?: () => void
   onReceptionner?: () => void
+  onRenvoyer?: () => void
 }) {
   const nomComplet = `${expedition.prenom_destinataire} ${expedition.nom_destinataire}`.trim() || '—'
   const urlSuivi = buildTrackingUrl(expedition.transporteur, expedition.numero_suivi)
@@ -130,6 +139,9 @@ function CarteEnvoyee({
           <span className="text-sm font-medium text-primary-900 truncate flex-1">{nomComplet}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
             <CategorieBadge categorie={expedition.categorie} />
+            {onRenvoyer && expedition.statut === 'envoye' && (
+              <ActionIcon icon={<Undo2 size={12} />} title="Renvoyer vers à expédier" onClick={onRenvoyer} />
+            )}
             {onModifier && <ActionIcon icon={<Pencil size={12} />} title="Modifier" onClick={onModifier} />}
             {onSupprimer && <ActionIcon icon={<Trash2 size={12} />} title="Supprimer" onClick={onSupprimer} className="hover:!bg-danger-100 hover:!text-danger-600" />}
           </div>
@@ -239,6 +251,48 @@ export default function ExpeditionPage() {
     await supabase
       .from('expeditions')
       .update({ statut: 'receptionne', date_reception: new Date().toISOString() })
+      .eq('id', e.id)
+    recharger()
+  }
+
+  async function renvoyerVersAExpedier(e: Expedition) {
+    if (!utilisateur) return
+    for (const item of e.items ?? []) {
+      if (item.sous_ensemble_id) {
+        const se = sousEnsembles.find((s) => s.id === item.sous_ensemble_id)
+        if (!se) continue
+        const nouvelleQuantite = se.quantite + item.quantite
+        const { error } = await supabase.from('sous_ensembles').update({ quantite: nouvelleQuantite }).eq('id', se.id)
+        if (error) throw error
+        await creerOperation({
+          type: 'expedition',
+          sous_ensemble_id: se.id,
+          quantite_avant: se.quantite,
+          quantite_apres: nouvelleQuantite,
+          delta: item.quantite,
+          utilisateur_id: utilisateur.id,
+          commentaire: `Retour en attente d'expédition — ${e.prenom_destinataire} ${e.nom_destinataire}`,
+        })
+      } else if (item.piece_id) {
+        const piece = pieces.find((p) => p.id === item.piece_id)
+        if (!piece) continue
+        const nouvelleQuantite = piece.quantite + item.quantite
+        const { error } = await supabase.from('pieces').update({ quantite: nouvelleQuantite }).eq('id', piece.id)
+        if (error) throw error
+        await creerOperation({
+          type: 'expedition',
+          piece_id: piece.id,
+          quantite_avant: piece.quantite,
+          quantite_apres: nouvelleQuantite,
+          delta: item.quantite,
+          utilisateur_id: utilisateur.id,
+          commentaire: `Retour en attente d'expédition — ${e.prenom_destinataire} ${e.nom_destinataire}`,
+        })
+      }
+    }
+    await supabase
+      .from('expeditions')
+      .update({ statut: 'a_expedier', date_expedition: null })
       .eq('id', e.id)
     recharger()
   }
@@ -361,6 +415,7 @@ export default function ExpeditionPage() {
                     onModifier={() => ouvrirModification(e)}
                     onSupprimer={() => setExpeditionASupprimer(e)}
                     onReceptionner={() => marquerReceptionnee(e)}
+                    onRenvoyer={() => renvoyerVersAExpedier(e)}
                   />
                 ))}
               </div>

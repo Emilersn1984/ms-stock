@@ -145,6 +145,7 @@ export type Expedition = {
   numero_serie: string | null
   items: ExpeditionItem[]
   date_commande: string
+  date_envoi_previsionnelle: string | null
   date_expedition: string | null
   date_reception: string | null
   utilisateur_id: string | null

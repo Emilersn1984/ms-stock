@@ -89,10 +89,21 @@ export default function ModalExpedition({
   const [rechercheItem, setRechercheItem] = useState('')
 
   const [numeroSerie, setNumeroSerie] = useState(expedition?.numero_serie ?? '')
+  const [dateEnvoiPrevisionnelle, setDateEnvoiPrevisionnelle] = useState(
+    expedition?.date_envoi_previsionnelle ? expedition.date_envoi_previsionnelle.slice(0, 10) : ''
+  )
   const isAdmin = utilisateur.role === 'patron'
 
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
+
+  // À la finalisation, les informations déjà renseignées lors de la création
+  // de la commande ne doivent plus être modifiables (seuls le contenu du colis,
+  // le transporteur, le suivi et le n° de série restent éditables).
+  const verrouilleALaFinalisation = mode === 'finaliser'
+  const champVerrouille = (valeur: string | null | undefined) =>
+    verrouilleALaFinalisation && !!valeur && valeur.trim() !== ''
+  const champDesactiveClass = 'disabled:bg-primary-50 disabled:text-primary-500 disabled:cursor-not-allowed'
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -299,6 +310,7 @@ export default function ModalExpedition({
         commentaire: commentaire.trim() || null,
         transporteur: transporteur || null,
         numero_suivi: numeroSuivi.trim() || null,
+        date_envoi_previsionnelle: dateEnvoiPrevisionnelle || null,
       }
 
       if (mode === 'creer') {
@@ -418,13 +430,10 @@ export default function ModalExpedition({
           }
         }
 
-        // Génération du numéro de série si vente + colis terminé fermé
-        // (l'admin peut avoir déjà saisi un numéro manuellement dans le champ dédié)
+        // Génération automatique du numéro de série à la finalisation
+        // (l'admin peut avoir déjà saisi/modifié un numéro manuellement dans le champ dédié)
         let numeroSerieFinal: string | null = numeroSerie.trim() || expedition.numero_serie || null
-        const contientColisFerme = items.some(
-          (i) => i.nom.trim().toLowerCase() === 'colis terminé fermé'
-        )
-        if (categorie === 'vente' && contientColisFerme && !numeroSerieFinal) {
+        if (!numeroSerieFinal) {
           const { data: serieData, error: errSerie } = await supabase.rpc('generate_numero_serie')
           if (errSerie) throw errSerie
           numeroSerieFinal = serieData as string
@@ -488,7 +497,8 @@ export default function ModalExpedition({
         </div>
 
         <form onSubmit={soumettre} className="space-y-4">
-          {/* Choix exclusif : client existant OU saisie manuelle */}
+          {/* Choix exclusif : client existant OU saisie manuelle — non pertinent à la finalisation */}
+          {!verrouilleALaFinalisation && (
           <div className="grid grid-cols-2 gap-2 p-1 bg-primary-50 rounded-xl">
             <button
               type="button"
@@ -514,9 +524,10 @@ export default function ModalExpedition({
               <UserPlus2 size={14} /> Nouveau client
             </button>
           </div>
+          )}
 
           {/* Recherche client existant */}
-          {modeSaisieClient === 'recherche' && (
+          {!verrouilleALaFinalisation && modeSaisieClient === 'recherche' && (
             <div ref={clientDropdownRef} className="relative">
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 Client
@@ -567,7 +578,8 @@ export default function ModalExpedition({
                 type="text"
                 value={prenom}
                 onChange={(e) => { setPrenom(e.target.value); setClientIdSelectionne(null) }}
-                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                disabled={champVerrouille(expedition?.prenom_destinataire)}
+                className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 ${champDesactiveClass}`}
               />
             </div>
             <div>
@@ -578,7 +590,8 @@ export default function ModalExpedition({
                 type="text"
                 value={nom}
                 onChange={(e) => { setNom(e.target.value); setClientIdSelectionne(null) }}
-                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                disabled={champVerrouille(expedition?.nom_destinataire)}
+                className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 ${champDesactiveClass}`}
               />
             </div>
           </div>
@@ -591,7 +604,8 @@ export default function ModalExpedition({
             <select
               value={langue}
               onChange={(e) => setLangue(e.target.value as Langue | '')}
-              className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+              disabled={champVerrouille(expedition?.langue)}
+              className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white ${champDesactiveClass}`}
             >
               <option value="">—</option>
               {LANGUES.map((l) => (
@@ -610,7 +624,8 @@ export default function ModalExpedition({
               onChange={(e) => setAdresse(e.target.value)}
               rows={3}
               placeholder="N° et rue, code postal, ville…"
-              className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
+              disabled={champVerrouille(adresse)}
+              className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none ${champDesactiveClass}`}
             />
           </div>
 
@@ -629,7 +644,8 @@ export default function ModalExpedition({
                 onChange={(e) => { setPays(e.target.value); setDropdownPaysOuvert(true) }}
                 onFocus={() => setDropdownPaysOuvert(true)}
                 placeholder="Tapez les premières lettres…"
-                className="w-full pl-10 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                disabled={champVerrouille(pays)}
+                className={`w-full pl-10 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 ${champDesactiveClass}`}
                 autoComplete="off"
               />
             </div>
@@ -662,7 +678,8 @@ export default function ModalExpedition({
                     key={v}
                     type="button"
                     onClick={() => setVersionCode(versionCode === v ? '' : v)}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors border ${
+                    disabled={champVerrouille(expedition?.version_code)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors border disabled:cursor-not-allowed disabled:opacity-50 ${
                       versionCode === v
                         ? 'bg-primary-900 border-primary-900 text-white'
                         : 'border-primary-200 text-primary-600 hover:bg-primary-50'
@@ -680,7 +697,8 @@ export default function ModalExpedition({
               <select
                 value={categorie}
                 onChange={(e) => setCategorie(e.target.value as CategorieExpedition | '')}
-                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+                disabled={champVerrouille(expedition?.categorie)}
+                className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white ${champDesactiveClass}`}
               >
                 <option value="">—</option>
                 {CATEGORIES.map((c) => (
@@ -690,8 +708,8 @@ export default function ModalExpedition({
             </div>
           </div>
 
-          {/* Recherche SAV */}
-          {categorie === 'sav' && (
+          {/* Recherche SAV — uniquement à la création/modification, pas à la finalisation */}
+          {!verrouilleALaFinalisation && categorie === 'sav' && (
             <div ref={savDropdownRef} className="relative">
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 Client / colis d'origine (SAV)
@@ -733,9 +751,9 @@ export default function ModalExpedition({
             </div>
           )}
 
-          {/* Contenu du colis : sous-ensembles + pièces du stock classique */}
+          {/* Contenu du colis : sous-ensembles + pièces du stock classique — zone distincte pour bien la séparer visuellement du reste du formulaire */}
           {editionContenuAutorisee && (
-            <div className="space-y-4">
+            <div className="space-y-4 bg-primary-50/80 border border-primary-100 rounded-2xl p-3.5">
               <div className="relative">
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
                 <input
@@ -743,7 +761,7 @@ export default function ModalExpedition({
                   value={rechercheItem}
                   onChange={(e) => setRechercheItem(e.target.value)}
                   placeholder="Rechercher un élément du stock…"
-                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
                   autoComplete="off"
                 />
               </div>
@@ -763,7 +781,7 @@ export default function ModalExpedition({
                       return (
                         <div
                           key={se.id}
-                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2"
+                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2 bg-white"
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
@@ -811,7 +829,7 @@ export default function ModalExpedition({
                       return (
                         <div
                           key={p.id}
-                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2"
+                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2 bg-white"
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-primary-900 truncate">{p.nom}</p>
@@ -886,11 +904,27 @@ export default function ModalExpedition({
               onChange={(e) => setCommentaire(e.target.value)}
               rows={3}
               placeholder="Détails de l'expédition, instructions du client…"
-              className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
+              disabled={champVerrouille(commentaire)}
+              className={`w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none ${champDesactiveClass}`}
             />
           </div>
 
-          {isAdmin && (mode === 'modifier' || (mode === 'finaliser' && categorie === 'vente')) ? (
+          {/* Date d'envoi prévisionnelle — uniquement à la création/modification */}
+          {mode !== 'finaliser' && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Date d'envoi prévisionnelle
+              </label>
+              <input
+                type="date"
+                value={dateEnvoiPrevisionnelle}
+                onChange={(e) => setDateEnvoiPrevisionnelle(e.target.value)}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+          )}
+
+          {isAdmin && (mode === 'modifier' || mode === 'finaliser') ? (
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 N° de série {mode === 'finaliser' ? '(laisser vide pour génération automatique)' : ''}
