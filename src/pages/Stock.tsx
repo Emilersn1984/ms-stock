@@ -218,7 +218,8 @@ function KpiStrip({ rouge, jaune, vert }: { rouge: number; jaune: number; vert: 
 
 export default function Stock() {
   const { pieces, chargement, erreur } = useStock()
-  const { sousEnsembles: sousEnsemblesEnStock } = useSousEnsemblesStock()
+  const { sousEnsembles: sousEnsemblesTous } = useSousEnsemblesStock()
+  const sousEnsemblesEnStock = sousEnsemblesTous.filter((se) => se.quantite > 0)
   const utilisateur = getUtilisateurStored()
 
   const [recherche, setRecherche] = useState('')

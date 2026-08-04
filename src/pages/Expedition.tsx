@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2 } from 'lucide-react'
 import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
+import { useStock } from '../hooks/useStock'
 import { useClients } from '../hooks/useClients'
 import { useExpeditions } from '../hooks/useExpeditions'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
@@ -129,9 +130,6 @@ function CarteEnvoyee({
           <span className="text-sm font-medium text-primary-900 truncate flex-1">{nomComplet}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
             <CategorieBadge categorie={expedition.categorie} />
-            {onReceptionner && (
-              <ActionIcon icon={<CheckCircle2 size={12} />} title="Marquer comme reçu" onClick={onReceptionner} className="hover:!bg-success-100 hover:!text-success-600" />
-            )}
             {onModifier && <ActionIcon icon={<Pencil size={12} />} title="Modifier" onClick={onModifier} />}
             {onSupprimer && <ActionIcon icon={<Trash2 size={12} />} title="Supprimer" onClick={onSupprimer} className="hover:!bg-danger-100 hover:!text-danger-600" />}
           </div>
@@ -159,6 +157,16 @@ function CarteEnvoyee({
             <span className="font-bold text-primary-700">{expedition.numero_serie}</span>
           )}
         </div>
+        {onReceptionner && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReceptionner() }}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-success-600 hover:text-success-700 transition-colors px-2.5 py-1.5 rounded-lg border border-success-300 hover:bg-success-50"
+          >
+            <CheckCircle2 size={13} />
+            Marquer reçu
+          </button>
+        )}
       </div>
     </div>
   )
@@ -166,6 +174,7 @@ function CarteEnvoyee({
 
 export default function ExpeditionPage() {
   const { sousEnsembles, chargement: chargementSe } = useSousEnsemblesStock()
+  const { pieces, chargement: chargementPieces } = useStock()
   const { clients, chargement: chargementClients, recharger: rechargerClients } = useClients()
   const { aExpedier, envoyees, historique, expeditions, chargement: chargementExp, recharger: rechargerExpeditions } = useExpeditions()
   const utilisateur = getUtilisateurStored()
@@ -268,7 +277,7 @@ export default function ExpeditionPage() {
     setFiltreDateFin('')
   }
 
-  const chargement = chargementSe || chargementClients || chargementExp
+  const chargement = chargementSe || chargementPieces || chargementClients || chargementExp
 
   if (!utilisateur) {
     return (
@@ -558,6 +567,7 @@ export default function ExpeditionPage() {
           expedition={expeditionEnEdition}
           clients={clients}
           sousEnsembles={sousEnsembles}
+          pieces={pieces}
           expeditionsEnvoyees={envoyees}
           utilisateur={utilisateur}
           onClose={fermerModal}

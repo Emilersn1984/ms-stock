@@ -118,7 +118,8 @@ export type Client = {
 }
 
 export type ExpeditionItem = {
-  sous_ensemble_id: string
+  sous_ensemble_id: string | null
+  piece_id: string | null
   nom: string
   quantite: number
 }

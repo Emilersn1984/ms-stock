@@ -6,6 +6,7 @@ import {
   Expedition,
   ExpeditionItem,
   SousEnsemble,
+  Piece,
   Transporteur,
   CategorieExpedition,
   Langue,
@@ -30,6 +31,7 @@ type Props = {
   expedition: Expedition | null
   clients: Client[]
   sousEnsembles: SousEnsemble[]
+  pieces: Piece[]
   expeditionsEnvoyees: Expedition[]
   utilisateur: Utilisateur
   onClose: () => void
@@ -46,6 +48,7 @@ export default function ModalExpedition({
   expedition,
   clients,
   sousEnsembles,
+  pieces,
   expeditionsEnvoyees,
   utilisateur,
   onClose,
@@ -169,29 +172,61 @@ export default function ModalExpedition({
     setDropdownSavOuvert(false)
   }
 
-  const sousEnsemblesDisponibles = useMemo(
-    () => sousEnsembles.filter((se) => se.quantite > 0),
-    [sousEnsembles]
-  )
+  // Un sous-ensemble/pièce déjà réservé dans cette expédition reste affiché même si son
+  // stock disponible est retombé à 0, afin de pouvoir le réduire ou le retirer.
+  const sousEnsemblesDisponibles = useMemo(() => {
+    const idsReserves = new Set(items.filter((i) => i.sous_ensemble_id).map((i) => i.sous_ensemble_id as string))
+    return sousEnsembles.filter((se) => se.quantite > 0 || idsReserves.has(se.id))
+  }, [sousEnsembles, items])
 
-  function quantiteSelectionnee(seId: string): number {
+  const piecesDisponibles = useMemo(() => {
+    const idsReserves = new Set(items.filter((i) => i.piece_id).map((i) => i.piece_id as string))
+    return pieces.filter((p) => p.quantite > 0 || idsReserves.has(p.id))
+  }, [pieces, items])
+
+  function quantiteSousEnsemble(seId: string): number {
     return items.find((i) => i.sous_ensemble_id === seId)?.quantite ?? 0
   }
 
-  function ajusterItem(se: SousEnsemble, delta: number) {
+  function quantitePiece(pieceId: string): number {
+    return items.find((i) => i.piece_id === pieceId)?.quantite ?? 0
+  }
+
+  function ajusterItemSousEnsemble(se: SousEnsemble, delta: number) {
     setItems((prev) => {
       const existant = prev.find((i) => i.sous_ensemble_id === se.id)
       const actuelle = existant?.quantite ?? 0
-      const nouvelle = Math.max(0, Math.min(se.quantite, actuelle + delta))
+      const max = se.quantite + actuelle
+      const nouvelle = Math.max(0, Math.min(max, actuelle + delta))
       if (nouvelle === 0) {
         return prev.filter((i) => i.sous_ensemble_id !== se.id)
       }
       if (existant) {
         return prev.map((i) => (i.sous_ensemble_id === se.id ? { ...i, quantite: nouvelle } : i))
       }
-      return [...prev, { sous_ensemble_id: se.id, nom: se.nom, quantite: nouvelle }]
+      return [...prev, { sous_ensemble_id: se.id, piece_id: null, nom: se.nom, quantite: nouvelle }]
     })
   }
+
+  function ajusterItemPiece(piece: Piece, delta: number) {
+    setItems((prev) => {
+      const existant = prev.find((i) => i.piece_id === piece.id)
+      const actuelle = existant?.quantite ?? 0
+      const max = piece.quantite + actuelle
+      const nouvelle = Math.max(0, Math.min(max, actuelle + delta))
+      if (nouvelle === 0) {
+        return prev.filter((i) => i.piece_id !== piece.id)
+      }
+      if (existant) {
+        return prev.map((i) => (i.piece_id === piece.id ? { ...i, quantite: nouvelle } : i))
+      }
+      return [...prev, { sous_ensemble_id: null, piece_id: piece.id, nom: piece.nom, quantite: nouvelle }]
+    })
+  }
+
+  // Édition du contenu autorisée à la finalisation, ou lors de la modification
+  // d'une expédition déjà envoyée/reçue (le stock est alors réajusté à l'enregistrement).
+  const editionContenuAutorisee = mode === 'finaliser' || (mode === 'modifier' && expedition?.statut !== 'a_expedier')
 
   async function soumettre(e: React.FormEvent) {
     e.preventDefault()
@@ -260,32 +295,107 @@ export default function ModalExpedition({
         })
         if (error) throw error
       } else if (mode === 'modifier' && expedition) {
+        // Si l'expédition est déjà envoyée/reçue, on répercute les différences
+        // de contenu sur les stocks (sous-ensembles et pièces classiques).
+        if (expedition.statut !== 'a_expedier') {
+          const cle = (i: ExpeditionItem) => (i.sous_ensemble_id ? `se:${i.sous_ensemble_id}` : `p:${i.piece_id}`)
+          const mapAncien = new Map((expedition.items ?? []).map((i) => [cle(i), i.quantite]))
+          const mapNouveau = new Map(items.map((i) => [cle(i), i.quantite]))
+          const clesTouchees = new Set([...mapAncien.keys(), ...mapNouveau.keys()])
+
+          for (const c of clesTouchees) {
+            const avant = mapAncien.get(c) ?? 0
+            const apres = mapNouveau.get(c) ?? 0
+            const delta = apres - avant
+            if (delta === 0) continue
+
+            if (c.startsWith('se:')) {
+              const se = sousEnsembles.find((s) => s.id === c.slice(3))
+              if (!se) continue
+              const nouvelleQuantite = se.quantite - delta
+              const { error: errSe } = await supabase
+                .from('sous_ensembles')
+                .update({ quantite: nouvelleQuantite })
+                .eq('id', se.id)
+              if (errSe) throw errSe
+              await creerOperation({
+                type: 'expedition',
+                sous_ensemble_id: se.id,
+                quantite_avant: se.quantite,
+                quantite_apres: nouvelleQuantite,
+                delta: -delta,
+                utilisateur_id: utilisateur.id,
+                commentaire: `Modification expédition — ${prenom.trim()} ${nom.trim()}`,
+              })
+            } else {
+              const piece = pieces.find((p) => p.id === c.slice(2))
+              if (!piece) continue
+              const nouvelleQuantite = piece.quantite - delta
+              const { error: errPiece } = await supabase
+                .from('pieces')
+                .update({ quantite: nouvelleQuantite })
+                .eq('id', piece.id)
+              if (errPiece) throw errPiece
+              await creerOperation({
+                type: 'expedition',
+                piece_id: piece.id,
+                quantite_avant: piece.quantite,
+                quantite_apres: nouvelleQuantite,
+                delta: -delta,
+                utilisateur_id: utilisateur.id,
+                commentaire: `Modification expédition — ${prenom.trim()} ${nom.trim()}`,
+              })
+            }
+          }
+        }
+
         const { error } = await supabase
           .from('expeditions')
-          .update(champsCommuns)
+          .update({ ...champsCommuns, items })
           .eq('id', expedition.id)
         if (error) throw error
       } else if (expedition) {
-        // Décompte du stock des sous-ensembles sélectionnés
+        // Décompte du stock des sous-ensembles et pièces sélectionnés
         for (const item of items) {
-          const se = sousEnsembles.find((s) => s.id === item.sous_ensemble_id)
-          if (!se) continue
-          const nouvelleQuantite = se.quantite - item.quantite
-          const { error: errSe } = await supabase
-            .from('sous_ensembles')
-            .update({ quantite: nouvelleQuantite })
-            .eq('id', se.id)
-          if (errSe) throw errSe
+          if (item.sous_ensemble_id) {
+            const se = sousEnsembles.find((s) => s.id === item.sous_ensemble_id)
+            if (!se) continue
+            const nouvelleQuantite = se.quantite - item.quantite
+            const { error: errSe } = await supabase
+              .from('sous_ensembles')
+              .update({ quantite: nouvelleQuantite })
+              .eq('id', se.id)
+            if (errSe) throw errSe
 
-          await creerOperation({
-            type: 'expedition',
-            sous_ensemble_id: se.id,
-            quantite_avant: se.quantite,
-            quantite_apres: nouvelleQuantite,
-            delta: -item.quantite,
-            utilisateur_id: utilisateur.id,
-            commentaire: `Expédition — ${prenom.trim()} ${nom.trim()}`,
-          })
+            await creerOperation({
+              type: 'expedition',
+              sous_ensemble_id: se.id,
+              quantite_avant: se.quantite,
+              quantite_apres: nouvelleQuantite,
+              delta: -item.quantite,
+              utilisateur_id: utilisateur.id,
+              commentaire: `Expédition — ${prenom.trim()} ${nom.trim()}`,
+            })
+          } else if (item.piece_id) {
+            const piece = pieces.find((p) => p.id === item.piece_id)
+            if (!piece) continue
+            const nouvelleQuantite = piece.quantite - item.quantite
+            const { error: errPiece } = await supabase
+              .from('pieces')
+              .update({ quantite: nouvelleQuantite })
+              .eq('id', piece.id)
+            if (errPiece) throw errPiece
+
+            await creerOperation({
+              type: 'expedition',
+              piece_id: piece.id,
+              quantite_avant: piece.quantite,
+              quantite_apres: nouvelleQuantite,
+              delta: -item.quantite,
+              utilisateur_id: utilisateur.id,
+              commentaire: `Expédition — ${prenom.trim()} ${nom.trim()}`,
+            })
+          }
         }
 
         // Génération du numéro de série si vente + colis terminé fermé
@@ -602,51 +712,100 @@ export default function ModalExpedition({
             </div>
           )}
 
-          {/* Sous-ensembles à décompter (uniquement en finalisation) */}
-          {mode === 'finaliser' && (
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                Sous-ensembles en stock à expédier
-              </label>
-              {sousEnsemblesDisponibles.length === 0 ? (
-                <p className="text-xs text-primary-400 italic">Aucun sous-ensemble en stock</p>
-              ) : (
-                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                  {sousEnsemblesDisponibles.map((se) => {
-                    const qte = quantiteSelectionnee(se.id)
-                    return (
-                      <div
-                        key={se.id}
-                        className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
-                          <p className="text-[11px] text-primary-400 tabular-nums">Stock : {se.quantite}</p>
+          {/* Contenu du colis : sous-ensembles + pièces du stock classique */}
+          {editionContenuAutorisee && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                  Sous-ensembles {mode === 'modifier' ? 'du colis' : 'en stock à expédier'}
+                </label>
+                {sousEnsemblesDisponibles.length === 0 ? (
+                  <p className="text-xs text-primary-400 italic">Aucun sous-ensemble en stock</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                    {sousEnsemblesDisponibles.map((se) => {
+                      const qte = quantiteSousEnsemble(se.id)
+                      const max = se.quantite + qte
+                      return (
+                        <div
+                          key={se.id}
+                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
+                            <p className="text-[11px] text-primary-400 tabular-nums">Stock : {se.quantite}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => ajusterItemSousEnsemble(se, -1)}
+                              disabled={qte === 0}
+                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
+                            >
+                              <Minus size={11} />
+                            </button>
+                            <span className="w-6 text-center text-sm font-bold tabular-nums text-primary-900">{qte}</span>
+                            <button
+                              type="button"
+                              onClick={() => ajusterItemSousEnsemble(se, 1)}
+                              disabled={qte >= max}
+                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
+                            >
+                              <PlusIcon size={11} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => ajusterItem(se, -1)}
-                            disabled={qte === 0}
-                            className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
-                          >
-                            <Minus size={11} />
-                          </button>
-                          <span className="w-6 text-center text-sm font-bold tabular-nums text-primary-900">{qte}</span>
-                          <button
-                            type="button"
-                            onClick={() => ajusterItem(se, 1)}
-                            disabled={qte >= se.quantite}
-                            className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
-                          >
-                            <PlusIcon size={11} />
-                          </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                  Pièces du stock classique (mousqueton, dyneema…)
+                </label>
+                {piecesDisponibles.length === 0 ? (
+                  <p className="text-xs text-primary-400 italic">Aucune pièce en stock</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                    {piecesDisponibles.map((p) => {
+                      const qte = quantitePiece(p.id)
+                      const max = p.quantite + qte
+                      return (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-primary-900 truncate">{p.nom}</p>
+                            <p className="text-[11px] text-primary-400 tabular-nums">Stock : {p.quantite}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => ajusterItemPiece(p, -1)}
+                              disabled={qte === 0}
+                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
+                            >
+                              <Minus size={11} />
+                            </button>
+                            <span className="w-6 text-center text-sm font-bold tabular-nums text-primary-900">{qte}</span>
+                            <button
+                              type="button"
+                              onClick={() => ajusterItemPiece(p, 1)}
+                              disabled={qte >= max}
+                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
+                            >
+                              <PlusIcon size={11} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
