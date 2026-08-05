@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2, Undo2, CalendarClock } from 'lucide-react'
+import { Plus, Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2, Undo2, CalendarClock, Users } from 'lucide-react'
 import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
 import { useStock } from '../hooks/useStock'
 import { useClients } from '../hooks/useClients'
@@ -9,6 +9,7 @@ import { drapeauLangue } from '../utils/langues'
 import { buildTrackingUrl } from '../utils/trackingUrl'
 import { supabase } from '../lib/supabase'
 import ModalExpedition from '../components/ModalExpedition'
+import ModalClients from '../components/ModalClients'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { creerOperation } from '../utils/creerOperation'
 import { Expedition, CategorieExpedition, Transporteur, Langue } from '../types'
@@ -197,6 +198,7 @@ export default function ExpeditionPage() {
   const utilisateur = getUtilisateurStored()
 
   const [modalOuvert, setModalOuvert] = useState<'creer' | 'finaliser' | 'modifier' | null>(null)
+  const [modalClientsOuvert, setModalClientsOuvert] = useState(false)
   const [expeditionEnEdition, setExpeditionEnEdition] = useState<Expedition | null>(null)
   const [expeditionASupprimer, setExpeditionASupprimer] = useState<Expedition | null>(null)
   const [suppressionEnCours, setSuppressionEnCours] = useState(false)
@@ -358,13 +360,22 @@ export default function ExpeditionPage() {
             Gestionnaire d'expéditions
           </p>
         </div>
-        <button
-          onClick={ouvrirCreation}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors"
-        >
-          <Plus size={15} />
-          <span className="hidden sm:inline">Ajouter manuellement</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setModalClientsOuvert(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-primary-200 hover:bg-primary-50 active:bg-primary-100 text-primary-900 text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Users size={15} />
+            <span className="hidden sm:inline">Clients</span>
+          </button>
+          <button
+            onClick={ouvrirCreation}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Plus size={15} />
+            <span className="hidden sm:inline">Ajouter manuellement</span>
+          </button>
+        </div>
       </div>
 
       {chargement ? (
@@ -632,6 +643,14 @@ export default function ExpeditionPage() {
           utilisateur={utilisateur}
           onClose={fermerModal}
           onSaved={recharger}
+        />
+      )}
+
+      {modalClientsOuvert && (
+        <ModalClients
+          clients={clients}
+          onClose={() => setModalClientsOuvert(false)}
+          onSaved={rechargerClients}
         />
       )}
 
