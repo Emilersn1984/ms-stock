@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { PackagePlus, Send, Search, X, Minus, Plus as PlusIcon, Pencil, UserSearch, UserPlus2 } from 'lucide-react'
+import { PackagePlus, Send, Search, X, Minus, Plus as PlusIcon, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   Client,
@@ -60,11 +60,6 @@ export default function ModalExpedition({
   const [adresse, setAdresse] = useState(adresseComplete(expedition))
   const [pays, setPays] = useState(expedition?.pays ?? '')
   const [clientIdSelectionne, setClientIdSelectionne] = useState<string | null>(expedition?.client_id ?? null)
-
-  // Choix exclusif : rechercher un client existant OU saisir manuellement
-  const [modeSaisieClient, setModeSaisieClient] = useState<'recherche' | 'manuel'>(
-    expedition?.client_id ? 'recherche' : 'manuel'
-  )
 
   const [rechercheClient, setRechercheClient] = useState(
     expedition?.clients ? `${expedition.clients.prenom} ${expedition.clients.nom}` : ''
@@ -259,29 +254,13 @@ export default function ModalExpedition({
     e.preventDefault()
     if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du destinataire requis'); return }
     if (mode === 'finaliser' && !categorie) { setErreur('Veuillez choisir une catégorie de colis'); return }
+    if (!verrouilleALaFinalisation && !clientIdSelectionne) { setErreur('Veuillez sélectionner un client existant'); return }
 
     setEnvoi(true)
     setErreur(null)
     try {
-      // Upsert / création du client si nécessaire
-      let clientId = modeSaisieClient === 'recherche' ? clientIdSelectionne : null
-      if (!clientId) {
-        const { data: nouveauClient, error: errClient } = await supabase
-          .from('clients')
-          .insert({
-            nom: nom.trim(),
-            prenom: prenom.trim(),
-            langue: langue || null,
-            adresse: adresse.trim() || null,
-            ville: null,
-            code_postal: null,
-            pays: pays.trim() || null,
-          })
-          .select('id')
-          .single()
-        if (errClient) throw errClient
-        clientId = nouveauClient?.id ?? null
-      } else {
+      const clientId = clientIdSelectionne
+      if (clientId) {
         await supabase
           .from('clients')
           .update({
@@ -497,37 +476,8 @@ export default function ModalExpedition({
         </div>
 
         <form onSubmit={soumettre} className="space-y-4">
-          {/* Choix exclusif : client existant OU saisie manuelle — non pertinent à la finalisation */}
-          {!verrouilleALaFinalisation && (
-          <div className="grid grid-cols-2 gap-2 p-1 bg-primary-50 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setModeSaisieClient('recherche')}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                modeSaisieClient === 'recherche' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-700'
-              }`}
-            >
-              <UserSearch size={14} /> Client existant
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setModeSaisieClient('manuel')
-                setClientIdSelectionne(null)
-                setRechercheClient('')
-                setDropdownClientOuvert(false)
-              }}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                modeSaisieClient === 'manuel' ? 'bg-white text-primary-900 shadow-sm' : 'text-primary-500 hover:text-primary-700'
-              }`}
-            >
-              <UserPlus2 size={14} /> Nouveau client
-            </button>
-          </div>
-          )}
-
           {/* Recherche client existant */}
-          {!verrouilleALaFinalisation && modeSaisieClient === 'recherche' && (
+          {!verrouilleALaFinalisation && (
             <div ref={clientDropdownRef} className="relative">
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 Client
@@ -957,7 +907,7 @@ export default function ModalExpedition({
             </button>
             <button
               type="submit"
-              disabled={envoi || !nom.trim() || !prenom.trim()}
+              disabled={envoi || !nom.trim() || !prenom.trim() || (!verrouilleALaFinalisation && !clientIdSelectionne)}
               className="flex-1 py-2.5 bg-primary-900 hover:bg-primary-800 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
             >
               {envoi
