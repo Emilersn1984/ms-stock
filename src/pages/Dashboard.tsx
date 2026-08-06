@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
-import { AlertTriangle, Check, Pencil } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, Check, Pencil, ShoppingBag, CalendarClock } from 'lucide-react'
 import { useStock } from '../hooks/useStock'
 import { useAlertes } from '../hooks/useAlertes'
 import { useUtilisateur } from '../hooks/useUtilisateur'
 import { useParametreProduction } from '../hooks/useParametreProduction'
 import { useCommandes } from '../hooks/useCommandes'
+import { useExpeditions } from '../hooks/useExpeditions'
 import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
 import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
-import { calcImpressions3DRecommandees } from '../utils/calcImpressions3D'
-import type { Impression3DRecommandee } from '../utils/calcImpressions3D'
 import { calcMaxFabricableDetail, calcBesoinPieces } from '../utils/calcDisponibilite'
+import { drapeauLangue } from '../utils/langues'
 import { supabase } from '../lib/supabase'
-import type { SousEnsemble, AlerteManuelle, Piece } from '../types'
+import type { SousEnsemble, AlerteManuelle, Piece, Expedition, CategorieExpedition } from '../types'
 
 type NomEntry = {
   piece_id: string | null
@@ -71,7 +72,7 @@ function formatDateAlerte(dateStr: string) {
 
 function KpiStrip({
   productionHebdo, onChangeProduction, enregistrement,
-  colisFabricables, pieceLimitante, semainesAutonomie,
+  colisFabricables, pieceLimitante, semainesAutonomie, ventesAExpedier,
 }: {
   productionHebdo: number
   onChangeProduction: (val: number) => void
@@ -79,6 +80,7 @@ function KpiStrip({
   colisFabricables: number
   pieceLimitante: Piece | null
   semainesAutonomie: number | null
+  ventesAExpedier: number
 }) {
   const [editing, setEditing] = useState(false)
   const [valeur, setValeur] = useState(String(productionHebdo))
@@ -112,7 +114,7 @@ function KpiStrip({
         : 'text-success-300'
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 bg-primary-900 rounded-2xl overflow-hidden mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 bg-primary-900 rounded-2xl overflow-hidden mb-8">
       <div className="px-6 py-5 flex flex-col gap-1.5 relative">
         {editing ? (
           <input
@@ -175,6 +177,15 @@ function KpiStrip({
         </span>
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
           Semaines d'autonomie
+        </span>
+      </div>
+
+      <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
+        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${ventesAExpedier > 0 ? 'text-alert-400' : 'text-success-300'}`}>
+          {ventesAExpedier}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+          Ventes à expédier
         </span>
       </div>
     </div>
@@ -280,42 +291,54 @@ function AchatRow({ achat, commandee }: { achat: AchatRecommande; commandee?: bo
   )
 }
 
-// ─── Impression 3D row ──────────────────────────────────────────────
+// ─── À expédier row ──────────────────────────────────────────────
 
-function ImpressionRow({ impression }: { impression: Impression3DRecommandee }) {
-  const critique = impression.urgence === 'critique'
-  const barColor = critique ? '#E53535' : '#F97316'
-  const badgeClass = critique ? 'bg-danger-100 text-danger-600' : 'bg-alert-100 text-alert-600'
-  const badgeText = critique ? 'Impression urgente' : 'À lancer'
+const CATEGORIE_BADGE_DASHBOARD: Record<CategorieExpedition, string> = {
+  vente: 'bg-success-100 text-success-600',
+  sav: 'bg-danger-100 text-danger-600',
+  demo: 'bg-alert-100 text-alert-600',
+  autre: 'bg-primary-100 text-primary-600',
+}
+
+const CATEGORIE_LABEL_DASHBOARD: Record<CategorieExpedition, string> = {
+  vente: 'Vente',
+  sav: 'SAV',
+  demo: 'Démo',
+  autre: 'Autre',
+}
+
+function AExpedierRow({ expedition, onClick }: { expedition: Expedition; onClick: () => void }) {
+  const nomComplet = `${expedition.prenom_destinataire} ${expedition.nom_destinataire}`.trim() || '—'
   return (
-    <div className="flex rounded-xl overflow-hidden border border-primary-100">
-      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: barColor }} />
+    <div
+      onClick={onClick}
+      className="w-full flex rounded-xl overflow-hidden border border-primary-100 hover:border-primary-300 transition-colors text-left cursor-pointer"
+    >
+      <div className={`w-[3px] flex-shrink-0 ${expedition.origine === 'stripe' ? 'bg-primary-500' : 'bg-primary-300'}`} />
       <div className="flex-1 px-3.5 py-2.5 bg-white min-w-0">
         <div className="flex items-start justify-between gap-2 mb-1">
-          <span className="text-sm font-medium text-primary-900 truncate flex-1">{impression.piece.nom}</span>
-          <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg flex-shrink-0 ${badgeClass}`}>
-            {badgeText}
-          </span>
-        </div>
-        {impression.source === 'predictive' ? (
-          <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-primary-500 tabular-nums flex-wrap">
-            <span>Stock: <span className="font-bold text-primary-700">{impression.piece.quantite}</span></span>
-            {impression.consommationHebdo > 0 && (
-              <span>Conso: <span className="font-bold">{impression.consommationHebdo}/sem</span></span>
-            )}
-            {impression.tempsImpressionHeures != null && (
-              <span>Impression: <span className="font-bold">{impression.tempsImpressionHeures}h</span></span>
-            )}
-            <span className={critique ? 'text-danger-600 font-bold' : 'text-alert-600 font-bold'}>
-              Restant estimé: {impression.stockRestantEstime}
+          <span className="text-sm font-medium text-primary-900 truncate flex-1">{nomComplet}</span>
+          {expedition.categorie && (
+            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg flex-shrink-0 ${CATEGORIE_BADGE_DASHBOARD[expedition.categorie]}`}>
+              {CATEGORIE_LABEL_DASHBOARD[expedition.categorie]}
             </span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 text-xs text-primary-500 tabular-nums">
-            <span>Stock: <span className="font-bold text-primary-700">{impression.piece.quantite}</span></span>
-            <span className="text-primary-400">· seuil statique</span>
-          </div>
-        )}
+          )}
+        </div>
+        <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-primary-500 tabular-nums flex-wrap">
+          <span>
+            {new Date(expedition.date_commande).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+          {expedition.langue && <span>{drapeauLangue(expedition.langue)}</span>}
+          <span className={`flex items-center gap-1 font-medium ${expedition.origine === 'stripe' ? 'text-primary-600' : 'text-primary-400'}`}>
+            {expedition.origine === 'stripe' ? <><ShoppingBag size={11} /> Stripe</> : 'Ajout manuel'}
+          </span>
+          {expedition.date_envoi_previsionnelle && (
+            <span className="flex items-center gap-1 text-alert-600 font-medium">
+              <CalendarClock size={11} />
+              {new Date(expedition.date_envoi_previsionnelle).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -348,12 +371,14 @@ function EtatVide({ texte }: { texte: string }) {
 // ─── Dashboard principal ───────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const { utilisateur } = useUtilisateur()
   const estOuvrier = utilisateur?.role === 'ouvrier'
   const { pieces, chargement: chargementStock } = useStock()
   const { alertes: toutesLesAlertes, chargement: chargementAlertes, creerAlerte, resoudreAlerte } = useAlertes()
   const { colisParSemaine, definirColisParSemaine, chargement: chargementParam, enregistrement } = useParametreProduction()
   const { commandesEnCours } = useCommandes()
+  const { aExpedier, chargement: chargementExpeditions } = useExpeditions()
 
   const alertes = useMemo(
     () => estOuvrier
@@ -407,9 +432,9 @@ export default function Dashboard() {
     [commandesEnCours]
   )
 
-  const impressions3D = useMemo(
-    () => calcImpressions3DRecommandees(pieces, consommationParPiece),
-    [pieces, consommationParPiece]
+  const ventesAExpedier = useMemo(
+    () => aExpedier.filter((e) => e.categorie === 'vente').length,
+    [aExpedier]
   )
 
   const { max: colisFabricables, pieceLimitante } = useMemo(
@@ -421,7 +446,7 @@ export default function Dashboard() {
 
   const conso3DActive = colisParSemaine > 0
 
-  const chargement = chargementStock || chargementAlertes || chargementSE || chargementParam
+  const chargement = chargementStock || chargementAlertes || chargementSE || chargementParam || chargementExpeditions
 
   async function handleCreerAlerte() {
     if (!messageAlerte.trim() || !utilisateur) return
@@ -473,6 +498,7 @@ export default function Dashboard() {
             colisFabricables={colisFabricables}
             pieceLimitante={pieceLimitante}
             semainesAutonomie={semainesAutonomie}
+            ventesAExpedier={ventesAExpedier}
           />
 
           {/* Paquet 1 — Sous-ensembles disponibles (juste sous le bandeau KPI) */}
@@ -525,23 +551,23 @@ export default function Dashboard() {
               </BentoCard>
             )}
 
-            {/* Paquet 3 — File d'impression 3D (à côté des achats) — masqué pour les ouvriers */}
+            {/* Paquet 3 — À expédier (à côté des achats) — masqué pour les ouvriers */}
             {!estOuvrier && (
               <BentoCard>
                 <SectionLabel
-                  texte="File d'impression 3D"
-                  count={impressions3D.length}
-                  accent={impressions3D.length > 0 ? 'text-alert-500' : 'text-primary-400'}
+                  texte="À expédier"
+                  count={aExpedier.length}
+                  accent={aExpedier.length > 0 ? 'text-alert-500' : 'text-primary-400'}
                 />
                 <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide mb-3">
-                  Pièces produites en interne — triées par urgence
+                  Commandes en attente d'expédition
                 </p>
-                {impressions3D.length === 0 ? (
-                  <EtatVide texte="Aucune impression 3D urgente — tous les stocks sont suffisants" />
+                {aExpedier.length === 0 ? (
+                  <EtatVide texte="Aucune commande à expédier" />
                 ) : (
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 max-h-[280px]">
-                    {impressions3D.map((imp) => (
-                      <ImpressionRow key={imp.piece.id} impression={imp} />
+                    {aExpedier.map((e) => (
+                      <AExpedierRow key={e.id} expedition={e} onClick={() => navigate('/expedition')} />
                     ))}
                   </div>
                 )}
