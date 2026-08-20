@@ -17,6 +17,7 @@ export type Piece = {
   seuil_vert: number
   categorie: string | null
   description: string | null
+  commentaire: string | null
   archivee: boolean
   photo_url: string | null
   delai_appro: number | null

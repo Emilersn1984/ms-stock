@@ -15,7 +15,7 @@ type Props = {
 
 export default function ModalModifierQuantite({ piece, utilisateur, categoriesExistantes = [], onClose, onSuccess }: Props) {
   const [nouvelleQuantite, setNouvelleQuantite] = useState(String(piece.quantite))
-  const [commentaire, setCommentaire] = useState('')
+  const [commentaire, setCommentaire] = useState(piece.commentaire ?? '')
   const [chargement, setChargement] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
 
@@ -66,7 +66,9 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
       estImpression3D !== piece.est_impression_3d ||
       tempsImpressionValue !== piece.temps_impression_heures
     )
-    if (nv === piece.quantite && !commentaire.trim() && !fichierPhoto && !adminFieldsChanged) { onClose(); return }
+    const commentaireValue = commentaire.trim() || null
+    const commentaireChanged = commentaireValue !== (piece.commentaire ?? null)
+    if (nv === piece.quantite && !commentaireChanged && !fichierPhoto && !adminFieldsChanged) { onClose(); return }
 
     setChargement(true)
     setErreur(null)
@@ -86,7 +88,7 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
         photoUrl = publicUrl
       }
 
-      const updatePayload: Record<string, unknown> = { quantite: nv }
+      const updatePayload: Record<string, unknown> = { quantite: nv, commentaire: commentaireValue }
       if (photoUrl) updatePayload.photo_url = photoUrl
       if (isAdmin) {
         updatePayload.description = description.trim() || null
@@ -112,7 +114,7 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
         quantite_apres: nv,
         delta: nv - piece.quantite,
         utilisateur_id: utilisateur.id,
-        commentaire: commentaire.trim() || undefined,
+        commentaire: commentaireChanged ? (commentaireValue ?? 'Commentaire supprimé') : undefined,
       })
 
       if (envoyerAlerte && messageAlerte.trim()) {
@@ -250,7 +252,7 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
               value={commentaire}
               onChange={(e) => setCommentaire(e.target.value)}
               rows={2}
-              placeholder="Ex : Comptage physique, correction d'erreur…"
+              placeholder="Ex : fournisseur habituel, référence, précaution de stockage…"
               className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 placeholder-primary-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
             />
           </div>
