@@ -26,7 +26,7 @@ export function useStock() {
     chargerPieces()
 
     const channel = supabase
-      .channel('pieces-realtime')
+      .channel(`pieces-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'pieces' },

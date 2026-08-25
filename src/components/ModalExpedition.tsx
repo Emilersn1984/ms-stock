@@ -14,15 +14,11 @@ import {
 } from '../types'
 import { TRANSPORTEURS } from '../utils/trackingUrl'
 import { LANGUES } from '../utils/langues'
-import { PAYS, drapeauPays } from '../utils/pays'
+import { drapeauPays } from '../utils/pays'
 import { creerOperation } from '../utils/creerOperation'
+import { consommerSousEnsembleExpedie } from '../utils/consommerExpedition'
+import { CATEGORIE_LABEL, CATEGORIE_BADGE, CATEGORIES_TOUTES } from '../utils/categoriesExpedition'
 
-const CATEGORIES: { value: CategorieExpedition; label: string }[] = [
-  { value: 'vente', label: 'Vente' },
-  { value: 'sav', label: 'SAV' },
-  { value: 'demo', label: 'Démo' },
-  { value: 'autre', label: 'Autre' },
-]
 
 const VERSIONS_CODE = ['v1', 'v2', 'v3', 'v4', 'v5']
 
@@ -34,6 +30,8 @@ type Props = {
   pieces: Piece[]
   expeditionsEnvoyees: Expedition[]
   utilisateur: Utilisateur
+  // Sous-ensemble considéré comme une « bouée complète » (table parametres).
+  sousEnsembleBoueeId: string | null
   onClose: () => void
   onSaved: () => void
 }
@@ -51,6 +49,7 @@ export default function ModalExpedition({
   pieces,
   expeditionsEnvoyees,
   utilisateur,
+  sousEnsembleBoueeId,
   onClose,
   onSaved,
 }: Props) {
@@ -72,8 +71,6 @@ export default function ModalExpedition({
   const [dropdownClientOuvert, setDropdownClientOuvert] = useState(false)
   const clientDropdownRef = useRef<HTMLDivElement>(null)
 
-  const [dropdownPaysOuvert, setDropdownPaysOuvert] = useState(false)
-  const paysDropdownRef = useRef<HTMLDivElement>(null)
 
   const [versionCode, setVersionCode] = useState(expedition?.version_code ?? '')
   const [categorie, setCategorie] = useState<CategorieExpedition | ''>(expedition?.categorie ?? '')
@@ -113,9 +110,6 @@ export default function ModalExpedition({
       if (savDropdownRef.current && !savDropdownRef.current.contains(e.target as Node)) {
         setDropdownSavOuvert(false)
       }
-      if (paysDropdownRef.current && !paysDropdownRef.current.contains(e.target as Node)) {
-        setDropdownPaysOuvert(false)
-      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -127,11 +121,6 @@ export default function ModalExpedition({
     return clients.filter((c) => `${c.prenom} ${c.nom}`.toLowerCase().includes(q)).slice(0, 8)
   }, [clients, rechercheClient])
 
-  const paysFiltres = useMemo(() => {
-    const q = pays.trim().toLowerCase()
-    if (!q) return PAYS.slice(0, 8)
-    return PAYS.filter((p) => p.nom.toLowerCase().startsWith(q) || p.code.toLowerCase() === q).slice(0, 8)
-  }, [pays])
 
   // Recherche SAV : par client déjà renseigné, ou par numéro de série d'un colis déjà expédié
   const resultatsSav = useMemo(() => {
@@ -169,10 +158,6 @@ export default function ModalExpedition({
     setDropdownClientOuvert(false)
   }
 
-  function selectionnerPays(code: string) {
-    setPays(code)
-    setDropdownPaysOuvert(false)
-  }
 
   function selectionnerResultatSav(r: { client: Client | null; numeroSerie: string | null; nomDest?: string; prenomDest?: string }) {
     if (r.client) {
@@ -253,12 +238,28 @@ export default function ModalExpedition({
 
   // Édition du contenu autorisée à la finalisation, ou lors de la modification
   // d'une expédition déjà envoyée/reçue (le stock est alors réajusté à l'enregistrement).
-  const editionContenuAutorisee = mode === 'finaliser' || (mode === 'modifier' && expedition?.statut !== 'a_expedier')
+  // Une bouée complète part toujours en un exemplaire du produit fini : il n'y
+  // a rien à choisir, donc pas de section contenu. Les autres types (SAV, don,
+  // démo, autre) demandent de préciser ce qui a réellement été expédié.
+  const categorieEffective: CategorieExpedition | null = expedition?.categorie ?? (categorie || null)
+  const estBoueeComplete = categorieEffective === 'vente'
+  const sousEnsembleBouee = useMemo(
+    () => sousEnsembles.find((s) => s.id === sousEnsembleBoueeId) ?? null,
+    [sousEnsembles, sousEnsembleBoueeId]
+  )
+
+  const editionContenuAutorisee = !estBoueeComplete && (
+    mode === 'finaliser' || (mode === 'modifier' && expedition?.statut !== 'a_expedier')
+  )
 
   async function soumettre(e: React.FormEvent) {
     e.preventDefault()
     if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du destinataire requis'); return }
-    if (mode === 'finaliser' && !categorie) { setErreur('Veuillez choisir une catégorie de colis'); return }
+    if (mode === 'finaliser' && !categorieEffective) { setErreur('Veuillez choisir un type de commande'); return }
+    if (mode === 'finaliser' && estBoueeComplete && !sousEnsembleBouee) {
+      setErreur("Aucun sous-ensemble « bouée complète » n'est configuré : impossible de décompter le stock.")
+      return
+    }
 
     setEnvoi(true)
     setErreur(null)
@@ -387,26 +388,27 @@ export default function ModalExpedition({
           .eq('id', expedition.id)
         if (error) throw error
       } else if (expedition) {
-        // Décompte du stock des sous-ensembles et pièces sélectionnés
-        for (const item of items) {
-          if (item.sous_ensemble_id) {
-            const se = sousEnsembles.find((s) => s.id === item.sous_ensemble_id)
-            if (!se) continue
-            const nouvelleQuantite = se.quantite - item.quantite
-            const { error: errSe } = await supabase
-              .from('sous_ensembles')
-              .update({ quantite: nouvelleQuantite })
-              .eq('id', se.id)
-            if (errSe) throw errSe
+        const libelleOperation = `Expédition — ${prenom.trim()} ${nom.trim()}`
 
-            await creerOperation({
-              type: 'expedition',
-              sous_ensemble_id: se.id,
-              quantite_avant: se.quantite,
-              quantite_apres: nouvelleQuantite,
-              delta: -item.quantite,
-              utilisateur_id: utilisateur.id,
-              commentaire: `Expédition — ${prenom.trim()} ${nom.trim()}`,
+        // Une bouée complète n'a pas de contenu à choisir : on décompte
+        // d'office un exemplaire du sous-ensemble produit fini.
+        const itemsExpedies: ExpeditionItem[] = estBoueeComplete
+          ? (sousEnsembleBouee
+              ? [{ sous_ensemble_id: sousEnsembleBouee.id, piece_id: null, nom: sousEnsembleBouee.nom, quantite: 1 }]
+              : [])
+          : items
+
+        for (const item of itemsExpedies) {
+          if (item.sous_ensemble_id) {
+            // Le stock assemblé est consommé en priorité ; ce qui manque est
+            // décompté sur les composants, comme si l'assemblage avait eu lieu.
+            await consommerSousEnsembleExpedie({
+              sousEnsembleId: item.sous_ensemble_id,
+              quantite: item.quantite,
+              pieces,
+              sousEnsembles,
+              utilisateurId: utilisateur.id,
+              commentaire: libelleOperation,
             })
           } else if (item.piece_id) {
             const piece = pieces.find((p) => p.id === item.piece_id)
@@ -425,7 +427,7 @@ export default function ModalExpedition({
               quantite_apres: nouvelleQuantite,
               delta: -item.quantite,
               utilisateur_id: utilisateur.id,
-              commentaire: `Expédition — ${prenom.trim()} ${nom.trim()}`,
+              commentaire: libelleOperation,
             })
           }
         }
@@ -444,7 +446,7 @@ export default function ModalExpedition({
           .update({
             ...champsCommuns,
             statut: 'envoye',
-            items,
+            items: itemsExpedies,
             numero_serie: numeroSerieFinal,
             date_expedition: new Date().toISOString(),
           })
@@ -624,46 +626,9 @@ export default function ModalExpedition({
               onChange={(e) => setAdresse(e.target.value)}
               rows={3}
               placeholder="N° et rue, code postal, ville…"
-              disabled={champVerrouille(adresse)}
+              disabled={champVerrouille(adresseComplete(expedition))}
               className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none ${champDesactiveClass}`}
             />
-          </div>
-
-          {/* Pays — sélection par autocomplétion avec drapeau */}
-          <div ref={paysDropdownRef} className="relative">
-            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Pays
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base pointer-events-none">
-                {drapeauPays(pays)}
-              </span>
-              <input
-                type="text"
-                value={pays}
-                onChange={(e) => { setPays(e.target.value); setDropdownPaysOuvert(true) }}
-                onFocus={() => setDropdownPaysOuvert(true)}
-                placeholder="Tapez les premières lettres…"
-                disabled={champVerrouille(pays)}
-                className={`w-full pl-10 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 ${champDesactiveClass}`}
-                autoComplete="off"
-              />
-            </div>
-            {dropdownPaysOuvert && paysFiltres.length > 0 && (
-              <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                {paysFiltres.map((p) => (
-                  <button
-                    key={p.code}
-                    type="button"
-                    onClick={() => selectionnerPays(p.code)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 transition-colors text-left"
-                  >
-                    <span className="text-base flex-shrink-0">{drapeauPays(p.code)}</span>
-                    <span className="flex-1 text-sm font-medium text-primary-900">{p.nom}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Version code + catégorie */}
@@ -692,19 +657,28 @@ export default function ModalExpedition({
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                Catégorie de colis
+                Type de commande
               </label>
-              <select
-                value={categorie}
-                onChange={(e) => setCategorie(e.target.value as CategorieExpedition | '')}
-                disabled={champVerrouille(expedition?.categorie)}
-                className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white ${champDesactiveClass}`}
-              >
-                <option value="">—</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
+              {/* Renseigné dans la page Ventes : on l'affiche tel quel. Le choix
+                  reste ouvert pour les lignes anciennes ou venues de Stripe. */}
+              {expedition?.categorie ? (
+                <div className="w-full border border-primary-200 rounded-xl px-3 py-2.5 bg-primary-50">
+                  <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg ${CATEGORIE_BADGE[expedition.categorie]}`}>
+                    {CATEGORIE_LABEL[expedition.categorie]}
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={categorie}
+                  onChange={(e) => setCategorie(e.target.value as CategorieExpedition | '')}
+                  className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+                >
+                  <option value="">—</option>
+                  {CATEGORIES_TOUTES.map((c) => (
+                    <option key={c} value={c}>{CATEGORIE_LABEL[c]}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -752,6 +726,28 @@ export default function ModalExpedition({
           )}
 
           {/* Contenu du colis : sous-ensembles + pièces du stock classique — zone distincte pour bien la séparer visuellement du reste du formulaire */}
+          {/* Bouée complète : le contenu est implicite, on rappelle simplement
+              ce qui sera décompté du stock. */}
+          {estBoueeComplete && mode === 'finaliser' && (
+            <div className="border border-primary-100 rounded-xl px-4 py-3 bg-primary-50">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1">
+                Contenu du colis
+              </p>
+              {sousEnsembleBouee ? (
+                <p className="text-xs text-primary-600 leading-relaxed">
+                  1 × <span className="font-semibold text-primary-900">{sousEnsembleBouee.nom}</span>
+                  {sousEnsembleBouee.quantite > 0
+                    ? ` — pris sur le stock (${sousEnsembleBouee.quantite} disponible${sousEnsembleBouee.quantite > 1 ? 's' : ''}).`
+                    : " — aucun en stock, les composants de sa nomenclature seront décomptés à sa place."}
+                </p>
+              ) : (
+                <p className="text-xs text-danger-600 leading-relaxed">
+                  Aucun sous-ensemble « bouée complète » n'est configuré : le stock ne pourra pas être décompté.
+                </p>
+              )}
+            </div>
+          )}
+
           {editionContenuAutorisee && (
             <div className="space-y-4 bg-primary-50/80 border border-primary-100 rounded-2xl p-3.5">
               <div className="relative">
@@ -904,7 +900,7 @@ export default function ModalExpedition({
               onChange={(e) => setCommentaire(e.target.value)}
               rows={3}
               placeholder="Détails de l'expédition, instructions du client…"
-              disabled={champVerrouille(commentaire)}
+              disabled={champVerrouille(expedition?.commentaire)}
               className={`w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none ${champDesactiveClass}`}
             />
           </div>

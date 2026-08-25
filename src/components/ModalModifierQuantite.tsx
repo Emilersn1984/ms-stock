@@ -38,6 +38,8 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
   const [seuilJaune, setSeuilJaune] = useState(String(piece.seuil_jaune))
   const [seuilVert, setSeuilVert] = useState(String(piece.seuil_vert))
   const [delaiAppro, setDelaiAppro] = useState(piece.delai_appro != null ? String(piece.delai_appro) : '')
+  const [prixUnitaire, setPrixUnitaire] = useState(piece.prix_unitaire != null ? String(piece.prix_unitaire) : '')
+  const [moq, setMoq] = useState(piece.moq != null ? String(piece.moq) : '')
   const [estImpression3D, setEstImpression3D] = useState(piece.est_impression_3d)
   const [tempsImpression, setTempsImpression] = useState(piece.temps_impression_heures != null ? String(piece.temps_impression_heures) : '')
 
@@ -56,6 +58,9 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
     if (isNaN(nv)) { setErreur('Quantité invalide'); return }
     const delaiApproValue = delaiAppro.trim() ? parseInt(delaiAppro, 10) || null : null
     const tempsImpressionValue = tempsImpression.trim() ? parseFloat(tempsImpression) || null : null
+    const prixUnitaireValue = prixUnitaire.trim() ? Number(prixUnitaire.replace(',', '.')) : null
+    if (prixUnitaireValue !== null && !Number.isFinite(prixUnitaireValue)) { setErreur('Prix unitaire invalide'); return }
+    const moqValue = moq.trim() ? parseInt(moq, 10) || null : null
     const adminFieldsChanged = isAdmin && (
       description !== (piece.description ?? '') ||
       categorie !== (piece.categorie ?? '') ||
@@ -63,6 +68,8 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
       parseInt(seuilJaune, 10) !== piece.seuil_jaune ||
       parseInt(seuilVert, 10) !== piece.seuil_vert ||
       delaiApproValue !== piece.delai_appro ||
+      prixUnitaireValue !== piece.prix_unitaire ||
+      moqValue !== piece.moq ||
       estImpression3D !== piece.est_impression_3d ||
       tempsImpressionValue !== piece.temps_impression_heures
     )
@@ -98,6 +105,8 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
         updatePayload.seuil_vert = parseInt(seuilVert, 10) || 0
         updatePayload.est_impression_3d = estImpression3D
         updatePayload.delai_appro = estImpression3D ? null : (delaiAppro.trim() ? parseInt(delaiAppro, 10) || null : null)
+        updatePayload.prix_unitaire = prixUnitaireValue
+        updatePayload.moq = moqValue
         updatePayload.temps_impression_heures = estImpression3D ? (tempsImpression.trim() ? parseFloat(tempsImpression) || null : null) : null
       }
 
@@ -389,6 +398,38 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
                   <p className="text-[10px] text-primary-400 mt-1">Laisser vide si non renseigné</p>
                 </div>
               )}
+
+              {/* Prix unitaire + MOQ */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                    Prix unitaire
+                    <span className="text-primary-400 font-normal normal-case tracking-normal ml-1">(€ HT)</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={prixUnitaire}
+                    onChange={(e) => setPrixUnitaire(e.target.value)}
+                    placeholder="Ex : 3.50"
+                    className="w-full border border-primary-200 rounded-xl px-3 py-2 text-primary-900 text-sm tabular-nums placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                    MOQ
+                    <span className="text-primary-400 font-normal normal-case tracking-normal ml-1">(qté mini)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={moq}
+                    onChange={(e) => setMoq(e.target.value)}
+                    placeholder="Ex : 100"
+                    className="w-full border border-primary-200 rounded-xl px-3 py-2 text-primary-900 text-sm tabular-nums placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                </div>
+              </div>
             </div>
           )}
 

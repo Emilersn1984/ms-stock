@@ -25,7 +25,7 @@ export function useClients() {
     chargerClients()
 
     const channel = supabase
-      .channel('clients-realtime')
+      .channel(`clients-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'clients' },

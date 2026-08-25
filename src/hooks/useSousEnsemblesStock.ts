@@ -19,7 +19,7 @@ export function useSousEnsemblesStock() {
     charger()
 
     const channel = supabase
-      .channel('se-stock-realtime')
+      .channel(`se-stock-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sous_ensembles' },

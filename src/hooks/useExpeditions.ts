@@ -26,7 +26,7 @@ export function useExpeditions() {
     chargerExpeditions()
 
     const channel = supabase
-      .channel('expeditions-realtime')
+      .channel(`expeditions-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'expeditions' },

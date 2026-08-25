@@ -1,14 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, Check, X, Factory, Wrench, Boxes, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useStock } from '../hooks/useStock'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { creerOperation } from '../utils/creerOperation'
 import { calcConsommation, LigneConsommation, LigneConsommationSE } from '../utils/calcConsommation'
 import { SousEnsemble, Piece } from '../types'
 
-export default function Fabrication() {
-  const { pieces } = useStock()
+type Props = {
+  // Fournies par la page Stock : un second useStock() ici créerait un canal
+  // temps réel homonyme, ce que Supabase refuse.
+  pieces: Piece[]
+  onClose: () => void
+}
+
+export default function ModalFabrication({ pieces, onClose }: Props) {
   const utilisateur = getUtilisateurStored()
 
   const [sousEnsembles, setSousEnsembles] = useState<SousEnsemble[]>([])
@@ -224,28 +229,47 @@ export default function Fabrication() {
 
   if (!utilisateur) {
     return (
-      <div className="p-5 md:p-8">
-        <p className="text-sm text-primary-600 italic py-2 pl-3 border-l-2 border-primary-200">
-          Connectez-vous pour déclarer une fabrication.
-        </p>
+      <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <p className="text-sm text-primary-600 italic mb-4">
+            Connectez-vous pour déclarer une fabrication.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 border border-primary-200 text-primary-700 text-sm font-medium rounded-xl hover:bg-primary-50 transition-colors"
+          >
+            Fermer
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="p-5 md:p-8">
+    <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
 
       {/* En-tête */}
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-primary-900 leading-none">Fabrication</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 mt-1.5">
-            Déclarer une fabrication et déduire les pièces du stock
-          </p>
+      <div className="flex items-start justify-between mb-6 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+            <Factory size={17} className="text-primary-700" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-primary-900 leading-tight">Fabrication</h2>
+            <p className="text-xs text-primary-500 mt-0.5">
+              Déclarer une fabrication et déduire les pièces du stock
+            </p>
+          </div>
         </div>
-        <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center">
-          <Factory size={17} className="text-primary-700" />
-        </div>
+        <button
+          onClick={onClose}
+          type="button"
+          title="Fermer"
+          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-primary-700 transition-colors"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* Bannière de confirmation */}
@@ -319,7 +343,7 @@ export default function Fabrication() {
 
           {dropdownOuvert && !chargementSE && sousEnsembles.length === 0 && (
             <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg px-4 py-3">
-              <p className="text-sm text-primary-400">Aucun sous-ensemble — créez-en un dans Nomenclature</p>
+              <p className="text-sm text-primary-400">Aucun sous-ensemble — créez-en un depuis Stock › Gérer les sous-ensembles</p>
             </div>
           )}
 
@@ -487,7 +511,7 @@ export default function Fabrication() {
       {/* Modal correction stocks */}
       {popupCorrection && (
         <div
-          className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-[55] p-4"
           
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -575,7 +599,7 @@ export default function Fabrication() {
       {/* Modal de confirmation */}
       {popupConfirm && (
         <div
-          className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-[55] p-4"
           
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -646,6 +670,7 @@ export default function Fabrication() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react'
-import { Plus, Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2, Undo2, CalendarClock, Users } from 'lucide-react'
+import { Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2, Undo2, CalendarClock, Users } from 'lucide-react'
 import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
 import { useStock } from '../hooks/useStock'
 import { useClients } from '../hooks/useClients'
 import { useExpeditions } from '../hooks/useExpeditions'
+import { useParametreProduction } from '../hooks/useParametreProduction'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { drapeauLangue } from '../utils/langues'
+import { CATEGORIE_LABEL, CATEGORIE_BADGE, CATEGORIES_TOUTES } from '../utils/categoriesExpedition'
 import { buildTrackingUrl } from '../utils/trackingUrl'
 import { supabase } from '../lib/supabase'
 import ModalExpedition from '../components/ModalExpedition'
@@ -32,20 +34,6 @@ function EtatVide({ texte }: { texte: string }) {
   return (
     <p className="text-sm text-primary-600 italic py-2 pl-3 border-l-2 border-primary-200">{texte}</p>
   )
-}
-
-const CATEGORIE_BADGE: Record<CategorieExpedition, string> = {
-  vente: 'bg-success-100 text-success-600',
-  sav: 'bg-danger-100 text-danger-600',
-  demo: 'bg-alert-100 text-alert-600',
-  autre: 'bg-primary-100 text-primary-600',
-}
-
-const CATEGORIE_LABEL: Record<CategorieExpedition, string> = {
-  vente: 'Vente',
-  sav: 'SAV',
-  demo: 'Démo',
-  autre: 'Autre',
 }
 
 function CategorieBadge({ categorie }: { categorie: CategorieExpedition | null }) {
@@ -195,6 +183,7 @@ export default function ExpeditionPage() {
   const { pieces, chargement: chargementPieces } = useStock()
   const { clients, chargement: chargementClients, recharger: rechargerClients } = useClients()
   const { aExpedier, envoyees, historique, expeditions, chargement: chargementExp, recharger: rechargerExpeditions } = useExpeditions()
+  const { sousEnsembleBoueeId } = useParametreProduction()
   const utilisateur = getUtilisateurStored()
 
   const [modalOuvert, setModalOuvert] = useState<'creer' | 'finaliser' | 'modifier' | null>(null)
@@ -211,11 +200,6 @@ export default function ExpeditionPage() {
   const [filtreCategorie, setFiltreCategorie] = useState<CategorieExpedition | ''>('')
   const [filtreDateDebut, setFiltreDateDebut] = useState('')
   const [filtreDateFin, setFiltreDateFin] = useState('')
-
-  function ouvrirCreation() {
-    setExpeditionEnEdition(null)
-    setModalOuvert('creer')
-  }
 
   function ouvrirFinalisation(e: Expedition) {
     setExpeditionEnEdition(e)
@@ -368,13 +352,6 @@ export default function ExpeditionPage() {
             <Users size={15} />
             <span className="hidden sm:inline">Clients</span>
           </button>
-          <button
-            onClick={ouvrirCreation}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            <Plus size={15} />
-            <span className="hidden sm:inline">Ajouter manuellement</span>
-          </button>
         </div>
       </div>
 
@@ -526,10 +503,9 @@ export default function ExpeditionPage() {
                 className="w-full border border-primary-200 rounded-xl px-3 py-2 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
               >
                 <option value="">Toutes</option>
-                <option value="vente">Vente</option>
-                <option value="sav">SAV</option>
-                <option value="demo">Démo</option>
-                <option value="autre">Autre</option>
+                {CATEGORIES_TOUTES.map((c) => (
+                  <option key={c} value={c}>{CATEGORIE_LABEL[c]}</option>
+                ))}
               </select>
             </div>
 
@@ -537,13 +513,15 @@ export default function ExpeditionPage() {
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 Date de réception
               </label>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-400 flex-shrink-0">Du</span>
                 <input
                   type="date"
                   value={filtreDateDebut}
                   onChange={(e) => setFiltreDateDebut(e.target.value)}
                   className="flex-1 min-w-0 border border-primary-200 rounded-xl px-2 py-2 text-xs text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
                 />
+                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-400 flex-shrink-0">Au</span>
                 <input
                   type="date"
                   value={filtreDateFin}
@@ -584,6 +562,7 @@ export default function ExpeditionPage() {
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Transporteur</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">N° série</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-4 py-3">Origine</th>
+                      <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-primary-50">
@@ -608,6 +587,16 @@ export default function ExpeditionPage() {
                           ) : (
                             <span className="text-primary-400">Manuel</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end">
+                            <ActionIcon
+                              icon={<Trash2 size={12} />}
+                              title="Supprimer"
+                              onClick={() => setExpeditionASupprimer(e)}
+                              className="hover:!bg-danger-100 hover:!text-danger-600"
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -641,6 +630,7 @@ export default function ExpeditionPage() {
           pieces={pieces}
           expeditionsEnvoyees={envoyees}
           utilisateur={utilisateur}
+          sousEnsembleBoueeId={sousEnsembleBoueeId}
           onClose={fermerModal}
           onSaved={recharger}
         />

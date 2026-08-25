@@ -11,6 +11,8 @@ import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
 import { calcBesoinPieces } from '../utils/calcDisponibilite'
 import { buildTrackingUrl, TRANSPORTEURS } from '../utils/trackingUrl'
 import ModalNouvelleCommande from '../components/ModalNouvelleCommande'
+import GraphiqueAchatsMensuels from '../components/GraphiqueAchatsMensuels'
+import HistoriqueCommandes from '../components/HistoriqueCommandes'
 import { Piece, Commande, Transporteur, SousEnsemble } from '../types'
 
 type NomEntry = {
@@ -279,38 +281,13 @@ function CommandeCard({
 
 // ─── Carte commande reçue ────────────────────────────────────────────────────
 
-function CommandeRecueRow({ commande }: { commande: Commande }) {
-  return (
-    <div className="flex rounded-xl overflow-hidden border border-primary-100">
-      <div className="w-[3px] flex-shrink-0 bg-primary-300" />
-      <div className="flex-1 flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-medium text-primary-900 truncate">
-            {commande.pieces?.nom ?? '—'}
-          </span>
-          <span className="text-xs font-bold tabular-nums text-primary-600 flex-shrink-0">
-            × {commande.quantite_commandee}
-          </span>
-        </div>
-        <span className="text-xs text-primary-500 tabular-nums flex-shrink-0">
-          Reçue le{' '}
-          <span className="font-medium text-primary-700">
-            {commande.date_reception
-              ? new Date(commande.date_reception).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
-              : '—'}
-          </span>
-        </span>
-      </div>
-    </div>
-  )
-}
 
 // ─── Page principale ────────────────────────────────────────────────────────────
 
 export default function Commandes() {
   const { pieces, chargement: chargementStock, recharger: rechargerPieces } = useStock()
-  const { commandesEnCours, commandesRecues, chargement: chargementCommandes, recharger: rechargerCommandes } = useCommandes()
-  const { colisParSemaine, chargement: chargementParam } = useParametreProduction()
+  const { commandes, commandesEnCours, chargement: chargementCommandes, recharger: rechargerCommandes } = useCommandes()
+  const { objectifVenteHebdo, objectifVenteMensuel, sousEnsembleBoueeId, chargement: chargementParam } = useParametreProduction()
   const utilisateur = getUtilisateurStored()
 
   const [nomenclature, setNomenclature] = useState<NomEntry[]>([])
@@ -346,8 +323,8 @@ export default function Commandes() {
   // nomenclature (BOM). Les productions déclarées dans l'onglet Fabrication
   // sont ignorées.
   const consommationParPiece = useMemo(
-    () => (colisTermineFermeId ? calcBesoinPieces(colisTermineFermeId, colisParSemaine, nomenclature) : new Map<string, number>()),
-    [colisTermineFermeId, colisParSemaine, nomenclature]
+    () => (colisTermineFermeId ? calcBesoinPieces(colisTermineFermeId, objectifVenteHebdo, nomenclature) : new Map<string, number>()),
+    [colisTermineFermeId, objectifVenteHebdo, nomenclature]
   )
 
   const piecesDejaCommandees = useMemo(
@@ -441,14 +418,6 @@ export default function Commandes() {
     rechargerCommandes()
   }
 
-  const commandesRecuesTriees = useMemo(
-    () => [...commandesRecues].sort((a, b) => {
-      const dateA = a.date_reception ? new Date(a.date_reception).getTime() : 0
-      const dateB = b.date_reception ? new Date(b.date_reception).getTime() : 0
-      return dateB - dateA
-    }),
-    [commandesRecues]
-  )
 
   const chargement = chargementStock || chargementCommandes || chargementParam || chargementNom
 
@@ -468,9 +437,9 @@ export default function Commandes() {
       {/* En-tête */}
       <div className="flex items-end justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-primary-900 leading-none">Commandes</h1>
+          <h1 className="text-3xl font-bold text-primary-900 leading-none">Achats MP</h1>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 mt-1.5">
-            Gestionnaire de commandes
+            Achats de matières premières
           </p>
         </div>
         <button
@@ -491,6 +460,15 @@ export default function Commandes() {
           Chargement...
         </div>
       ) : (
+        <>
+        <GraphiqueAchatsMensuels
+          commandes={commandes}
+          pieces={pieces}
+          nomenclature={nomenclature}
+          sousEnsembleBoueeId={sousEnsembleBoueeId}
+          objectifVenteMensuel={objectifVenteMensuel}
+          commandesEnCours={commandesEnCours}
+        />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
           {/* Colonne gauche — à commander */}
@@ -537,26 +515,10 @@ export default function Commandes() {
             )}
           </div>
         </div>
+        </>
       )}
 
-      {!chargement && (
-        <div className="mt-5 bg-white rounded-2xl border border-primary-100 p-5">
-          <SectionLabel
-            texte="Commandes reçues"
-            count={commandesRecuesTriees.length}
-            accent={commandesRecuesTriees.length > 0 ? 'text-primary-600' : 'text-primary-400'}
-          />
-          {commandesRecuesTriees.length === 0 ? (
-            <EtatVide texte="Aucune commande reçue pour le moment" />
-          ) : (
-            <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
-              {commandesRecuesTriees.map((c) => (
-                <CommandeRecueRow key={c.id} commande={c} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {!chargement && <HistoriqueCommandes commandes={commandes} />}
 
       {modalOuvert && (
         <ModalNouvelleCommande

@@ -1,544 +1,321 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, Check, ClipboardList, Pencil } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import AnimatedList from '../components/AnimatedList'
-import { useAnimatedListItem } from '../hooks/useAnimatedListItem'
-import { getUtilisateurStored } from '../hooks/useUtilisateur'
-import { recalculerStock } from '../utils/recalculerStock'
-import { TypeOperation } from '../types'
+import { useState, useMemo } from 'react'
+import { Search, ScrollText, ShoppingBag, Truck, Download } from 'lucide-react'
+import { useExpeditions } from '../hooks/useExpeditions'
+import { useCommandes } from '../hooks/useCommandes'
+import { CATEGORIE_LABEL } from '../utils/categoriesExpedition'
 
-type OperationComplete = {
+type CategorieLigne = 'vente' | 'achat'
+
+type LigneHistorique = {
   id: string
-  type: TypeOperation
-  piece_id: string | null
-  sous_ensemble_id: string | null
-  quantite_avant: number | null
-  quantite_apres: number | null
-  delta: number | null
-  utilisateur_id: string
-  commentaire: string | null
-  created_at: string
-  pieces: { id: string; nom: string } | null
-  utilisateurs: { nom: string; prenom: string } | null
-  sous_ensembles: { nom: string } | null
-}
-
-const TYPE_LABELS: Record<TypeOperation, string> = {
-  livraison: 'Livraison',
-  fabrication: 'Fabrication',
-  correction: 'Correction',
-  ajout_piece: 'Ajout pièce',
-  expedition: 'Expédition',
-}
-
-const TYPE_TEXT_CLASS: Record<TypeOperation, string> = {
-  livraison: 'text-success-600',
-  fabrication: 'text-primary-600',
-  correction: 'text-alert-600',
-  ajout_piece: 'text-primary-500',
-  expedition: 'text-primary-700',
-}
-
-const TYPE_BAR_HEX: Record<TypeOperation, string> = {
-  livraison: '#22B84F',
-  fabrication: '#20808E',
-  correction: '#F97316',
-  ajout_piece: '#38A5B4',
-  expedition: '#1E3A5F',
+  date: string
+  categorie: CategorieLigne
+  // Bouée complète / SAV / Don pour une vente, nom de la pièce pour un achat.
+  type: string
+  // Positif pour une vente (perçu), négatif pour un achat (dépensé).
+  montant: number | null
+  detail: string
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function OperationRow({ op, index, onModifier }: {
-  op: OperationComplete
-  index: number
-  onModifier: (op: OperationComplete) => void
-}) {
-  const { ref, style } = useAnimatedListItem<HTMLTableRowElement>(index)
-  return (
-    <tr ref={ref} style={style} className="hover:bg-primary-50 transition-colors">
-      <td
-        className="border-l-4 px-4 py-3.5 text-xs text-primary-500 whitespace-nowrap"
-        style={{ borderLeftColor: TYPE_BAR_HEX[op.type] }}
-      >
-        {formatDate(op.created_at)}
-      </td>
-      <td className="px-5 py-3.5">
-        <span className={`text-xs font-bold uppercase tracking-wide ${TYPE_TEXT_CLASS[op.type]}`}>
-          {TYPE_LABELS[op.type]}
-        </span>
-      </td>
-      <td className="px-5 py-3.5 font-medium text-primary-900">
-        {op.pieces?.nom ?? op.sous_ensembles?.nom ?? '—'}
-      </td>
-      <td className="px-5 py-3.5 text-xs text-primary-500 whitespace-nowrap">
-        {op.utilisateurs ? `${op.utilisateurs.prenom} ${op.utilisateurs.nom}` : '—'}
-      </td>
-      <td className="px-5 py-3.5 text-right font-bold tabular-nums">
-        {op.delta != null ? (
-          <span className={op.delta >= 0 ? 'text-success-600' : 'text-danger-600'}>
-            {op.delta >= 0 ? '+' : ''}{op.delta}
-          </span>
-        ) : '—'}
-      </td>
-      <td className="px-5 py-3.5 text-right font-bold tabular-nums text-primary-700">
-        {op.quantite_apres ?? '—'}
-      </td>
-      <td className="px-5 py-3.5 text-xs text-primary-400 max-w-[180px] truncate">
-        {op.commentaire ?? ''}
-      </td>
-      <td className="px-5 py-3.5 text-right">
-        <button
-          onClick={() => onModifier(op)}
-          className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors"
-        >
-          Modifier
-        </button>
-      </td>
-    </tr>
-  )
+function formatMontant(montant: number | null): string {
+  if (montant == null) return '—'
+  return montant.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
-function OperationCard({ op, index, onModifier }: {
-  op: OperationComplete
-  index: number
-  onModifier: (op: OperationComplete) => void
-}) {
-  const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
-  return (
-    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
-      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: TYPE_BAR_HEX[op.type] }} />
-      <div className="flex-1 px-3.5 py-2.5 bg-white min-w-0">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="flex-1 min-w-0">
-            <span className={`text-[10px] font-bold uppercase tracking-wide ${TYPE_TEXT_CLASS[op.type]}`}>
-              {TYPE_LABELS[op.type]}
-            </span>
-            <p className="text-sm font-medium text-primary-900 truncate mt-0.5">
-              {op.pieces?.nom ?? op.sous_ensembles?.nom ?? '—'}
-            </p>
-          </div>
-          {op.delta != null && (
-            <span className={`text-base font-bold tabular-nums flex-shrink-0 ${op.delta >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
-              {op.delta >= 0 ? '+' : ''}{op.delta}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] text-primary-400 tabular-nums">
-              {op.utilisateurs ? `${op.utilisateurs.prenom} ${op.utilisateurs.nom}` : '—'} · {formatDate(op.created_at)}
-            </p>
-            {op.commentaire && (
-              <p className="text-xs text-primary-400 mt-0.5 truncate">{op.commentaire}</p>
-            )}
-          </div>
-          <button
-            onClick={() => onModifier(op)}
-            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-800 hover:bg-primary-50 transition-colors ml-2"
-          >
-            <Pencil size={13} />
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+function champCsv(valeur: string): string {
+  if (/[";\n\r]/.test(valeur)) return `"${valeur.replace(/"/g, '""')}"`
+  return valeur
 }
 
 export default function Historique() {
-  const utilisateur = getUtilisateurStored()
+  const { expeditions, chargement: chargementVentes } = useExpeditions()
+  const { commandes, chargement: chargementAchats } = useCommandes()
 
-  const [operations, setOperations] = useState<OperationComplete[]>([])
-  const [chargement, setChargement] = useState(true)
-
-  const [filtreType, setFiltreType] = useState<TypeOperation | 'tous'>('tous')
-  const [filtrePiece, setFiltrePiece] = useState('')
+  const [recherche, setRecherche] = useState('')
+  const [filtreCategorie, setFiltreCategorie] = useState<CategorieLigne | ''>('')
   const [filtreDateDebut, setFiltreDateDebut] = useState('')
   const [filtreDateFin, setFiltreDateFin] = useState('')
-  const [filtreOperateur, setFiltreOperateur] = useState('')
 
-  const [operationAModifier, setOperationAModifier] = useState<OperationComplete | null>(null)
-  const [nouveauDelta, setNouveauDelta] = useState('')
-  const [nouveauCommentaire, setNouveauCommentaire] = useState('')
-  const [chargementModif, setChargementModif] = useState(false)
-  const [erreurModif, setErreurModif] = useState<string | null>(null)
-  const [confirmationModif, setConfirmationModif] = useState(false)
+  const chargement = chargementVentes || chargementAchats
 
-  const chargerOperations = useCallback(async () => {
-    setChargement(true)
-    const { data } = await supabase
-      .from('operations')
-      .select('*, pieces(id, nom), utilisateurs(nom, prenom), sous_ensembles(nom)')
-      .order('created_at', { ascending: false })
-      .limit(500)
-    setOperations((data as unknown as OperationComplete[]) ?? [])
-    setChargement(false)
-  }, [])
+  const hasFiltresActifs = !!(recherche || filtreCategorie || filtreDateDebut || filtreDateFin)
 
-  useEffect(() => {
-    chargerOperations()
-  }, [chargerOperations])
+  function resetFiltres() {
+    setRecherche('')
+    setFiltreCategorie('')
+    setFiltreDateDebut('')
+    setFiltreDateFin('')
+  }
 
-  const operateurs = useMemo(() => {
-    const map = new Map<string, { id: string; nom: string; prenom: string }>()
-    for (const op of operations) {
-      if (op.utilisateurs && !map.has(op.utilisateur_id)) {
-        map.set(op.utilisateur_id, {
-          id: op.utilisateur_id,
-          nom: op.utilisateurs.nom,
-          prenom: op.utilisateurs.prenom,
-        })
-      }
-    }
-    return Array.from(map.values()).sort((a, b) =>
-      `${a.prenom} ${a.nom}`.localeCompare(`${b.prenom} ${b.nom}`)
+  // Une ligne par vente et par achat de matière première, fusionnées puis
+  // triées par date décroissante.
+  const lignes = useMemo<LigneHistorique[]>(() => {
+    const ventes: LigneHistorique[] = expeditions.map((e) => ({
+      id: `vente-${e.id}`,
+      date: e.date_commande,
+      categorie: 'vente',
+      type: e.categorie ? CATEGORIE_LABEL[e.categorie] : '—',
+      montant: e.montant_paye,
+      detail: `${e.prenom_destinataire} ${e.nom_destinataire}`.trim(),
+    }))
+
+    const achats: LigneHistorique[] = commandes.map((c) => ({
+      id: `achat-${c.id}`,
+      date: c.date_commande,
+      categorie: 'achat',
+      type: c.pieces?.nom ?? '—',
+      montant: c.montant_paye,
+      detail: `${c.quantite_commandee} unité${c.quantite_commandee > 1 ? 's' : ''}`,
+    }))
+
+    return [...ventes, ...achats].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     )
-  }, [operations])
+  }, [expeditions, commandes])
 
-  const operationsFiltrees = useMemo(() => {
-    return operations.filter((op) => {
-      if (filtreType !== 'tous' && op.type !== filtreType) return false
-      if (filtrePiece.trim()) {
-        const nom = (op.pieces?.nom ?? op.sous_ensembles?.nom ?? '').toLowerCase()
-        if (!nom.includes(filtrePiece.toLowerCase())) return false
+  const lignesFiltrees = useMemo(() => {
+    return lignes.filter((l) => {
+      if (filtreCategorie && l.categorie !== filtreCategorie) return false
+      if (recherche) {
+        const q = recherche.toLowerCase()
+        if (!l.type.toLowerCase().includes(q) && !l.detail.toLowerCase().includes(q)) return false
       }
-      if (filtreOperateur && op.utilisateur_id !== filtreOperateur) return false
-      if (filtreDateDebut && new Date(op.created_at) < new Date(filtreDateDebut)) return false
+      if (filtreDateDebut && new Date(l.date) < new Date(filtreDateDebut)) return false
       if (filtreDateFin) {
         const fin = new Date(filtreDateFin)
         fin.setHours(23, 59, 59, 999)
-        if (new Date(op.created_at) > fin) return false
+        if (new Date(l.date) > fin) return false
       }
       return true
     })
-  }, [operations, filtreType, filtrePiece, filtreOperateur, filtreDateDebut, filtreDateFin])
+  }, [lignes, recherche, filtreCategorie, filtreDateDebut, filtreDateFin])
 
-  const hasFiltresActifs =
-    filtreType !== 'tous' || filtrePiece || filtreDateDebut || filtreDateFin || filtreOperateur
-
-  function resetFiltres() {
-    setFiltreType('tous')
-    setFiltrePiece('')
-    setFiltreDateDebut('')
-    setFiltreDateFin('')
-    setFiltreOperateur('')
-  }
-
-  function ouvrirModal(op: OperationComplete) {
-    setOperationAModifier(op)
-    setNouveauDelta(op.delta?.toString() ?? '0')
-    setNouveauCommentaire(op.commentaire ?? '')
-    setErreurModif(null)
-    setConfirmationModif(false)
-  }
-
-  function fermerModal() {
-    setOperationAModifier(null)
-    setNouveauDelta('')
-    setNouveauCommentaire('')
-    setErreurModif(null)
-    setConfirmationModif(false)
-  }
-
-  async function sauvegarderModification() {
-    if (!operationAModifier || !utilisateur) return
-    const delta = parseInt(nouveauDelta, 10)
-    if (isNaN(delta)) {
-      setErreurModif('Delta invalide')
-      return
+  const totaux = useMemo(() => {
+    let percu = 0
+    let depense = 0
+    for (const l of lignesFiltrees) {
+      if (l.montant == null) continue
+      if (l.categorie === 'vente') percu += l.montant
+      else depense += l.montant
     }
+    return { percu, depense, solde: percu - depense }
+  }, [lignesFiltrees])
 
-    setChargementModif(true)
-    setErreurModif(null)
-
-    try {
-      const { error } = await supabase
-        .from('operations')
-        .update({
-          delta,
-          commentaire: nouveauCommentaire.trim() || null,
-        })
-        .eq('id', operationAModifier.id)
-
-      if (error) throw error
-
-      if (operationAModifier.piece_id) {
-        await recalculerStock(operationAModifier.piece_id)
-      }
-
-      setConfirmationModif(true)
-      chargerOperations()
-      setTimeout(() => fermerModal(), 1800)
-    } catch (err) {
-      setErreurModif(err instanceof Error ? err.message : 'Erreur lors de la modification')
-    } finally {
-      setChargementModif(false)
-    }
-  }
-
-  if (!utilisateur) {
-    return (
-      <div className="p-5 md:p-8">
-        <p className="text-sm text-primary-600 italic py-2 pl-3 border-l-2 border-primary-200">
-          Connectez-vous pour accéder à l'historique.
-        </p>
-      </div>
-    )
+  function exporterCsv() {
+    const entetes = ['Date', 'Catégorie', 'Type', 'Détail', 'Montant perçu HT (€)', 'Montant dépensé HT (€)']
+    const donnees = lignesFiltrees.map((l) => [
+      formatDate(l.date),
+      l.categorie === 'vente' ? 'Vente' : 'Achat MP',
+      l.type,
+      l.detail,
+      l.categorie === 'vente' && l.montant != null ? String(l.montant).replace('.', ',') : '',
+      l.categorie === 'achat' && l.montant != null ? String(l.montant).replace('.', ',') : '',
+    ])
+    const contenu = [entetes, ...donnees].map((r) => r.map(champCsv).join(';')).join('\r\n')
+    const blob = new Blob(['﻿' + contenu], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const lien = document.createElement('a')
+    lien.href = url
+    lien.download = `historique-${new Date().toISOString().slice(0, 10)}.csv`
+    lien.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
     <div className="p-5 md:p-8">
 
       {/* En-tête */}
-      <div className="flex items-end justify-between mb-8">
+      <div className="flex items-end justify-between mb-8 gap-3">
         <div>
           <h1 className="text-3xl font-bold text-primary-900 leading-none">Historique</h1>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 mt-1.5">
-            Toutes les opérations enregistrées
+            {lignes.length} mouvement{lignes.length !== 1 ? 's' : ''} — ventes et achats
           </p>
         </div>
-        <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center">
-          <ClipboardList size={17} className="text-primary-700" />
-        </div>
+        <button
+          onClick={exporterCsv}
+          disabled={lignesFiltrees.length === 0}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-primary-200 hover:bg-primary-50 disabled:opacity-40 text-primary-900 text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
+        >
+          <Download size={15} />
+          <span className="hidden sm:inline">Exporter en CSV</span>
+        </button>
       </div>
 
-      {/* Filtres */}
-      <div className="bg-white rounded-2xl border border-primary-100 p-4 mb-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Type
-            </label>
-            <select
-              value={filtreType}
-              onChange={(e) => setFiltreType(e.target.value as TypeOperation | 'tous')}
-              className="w-full border border-primary-200 rounded-xl px-3 py-2 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
-            >
-              <option value="tous">Tous les types</option>
-              <option value="livraison">Livraison</option>
-              <option value="fabrication">Fabrication</option>
-              <option value="correction">Correction</option>
-              <option value="ajout_piece">Ajout pièce</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Pièce / SE
-            </label>
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
-              <input
-                type="text"
-                value={filtrePiece}
-                onChange={(e) => setFiltrePiece(e.target.value)}
-                placeholder="Rechercher…"
-                className="w-full pl-8 pr-3 py-2 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Opérateur
-            </label>
-            <select
-              value={filtreOperateur}
-              onChange={(e) => setFiltreOperateur(e.target.value)}
-              className="w-full border border-primary-200 rounded-xl px-3 py-2 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
-            >
-              <option value="">Tous les opérateurs</option>
-              {operateurs.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.prenom} {u.nom}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Période
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={filtreDateDebut}
-                onChange={(e) => setFiltreDateDebut(e.target.value)}
-                className="flex-1 min-w-0 border border-primary-200 rounded-xl px-2 py-2 text-xs text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-              />
-              <input
-                type="date"
-                value={filtreDateFin}
-                onChange={(e) => setFiltreDateFin(e.target.value)}
-                className="flex-1 min-w-0 border border-primary-200 rounded-xl px-2 py-2 text-xs text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-              />
-            </div>
-          </div>
-        </div>
-
-        {hasFiltresActifs && (
-          <div className="mt-3 flex items-center justify-between">
-            <p className="text-xs text-primary-500 tabular-nums">
-              {operationsFiltrees.length} résultat{operationsFiltrees.length !== 1 ? 's' : ''}
-            </p>
-            <button
-              onClick={resetFiltres}
-              className="text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
-            >
-              Réinitialiser les filtres
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Contenu */}
       {chargement ? (
-        <div className="flex items-center justify-center h-40">
-          <p className="text-primary-400 text-sm">Chargement…</p>
+        <div className="flex items-center justify-center h-40 text-primary-400 text-sm">
+          Chargement...
         </div>
-      ) : operationsFiltrees.length === 0 ? (
-        <p className="text-sm text-primary-600 italic py-2 pl-3 border-l-2 border-primary-200">
-          Aucune opération trouvée
-        </p>
       ) : (
         <>
-          {/* Tableau desktop */}
-          <div className="hidden md:block bg-white rounded-2xl border border-primary-100 overflow-hidden mb-2">
-            <AnimatedList maxHeightClass="max-h-[60vh]" fadeColor="#FFFFFF">
-              <table className="w-full text-sm">
-                <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
-                  <tr>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Date</th>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Type</th>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Pièce / SE</th>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Opérateur</th>
-                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Delta</th>
-                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Stock après</th>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Commentaire</th>
-                    <th className="px-5 py-3.5" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-primary-50">
-                  {operationsFiltrees.map((op, i) => (
-                    <OperationRow key={op.id} op={op} index={i} onModifier={ouvrirModal} />
-                  ))}
-                </tbody>
-              </table>
-            </AnimatedList>
+          {/* Totaux */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 bg-primary-900 rounded-2xl overflow-hidden mb-6">
+            <div className="px-6 py-5 flex flex-col gap-1.5">
+              <span className="text-4xl font-bold leading-none tracking-tight tabular-nums text-success-300">
+                {totaux.percu.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+                <span className="text-xl ml-1">€</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+                Perçu HT
+              </span>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
+              <span className="text-4xl font-bold leading-none tracking-tight tabular-nums text-alert-400">
+                {totaux.depense.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+                <span className="text-xl ml-1">€</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+                Dépensé HT
+              </span>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
+              <span className={`text-4xl font-bold leading-none tracking-tight tabular-nums ${
+                totaux.solde >= 0 ? 'text-success-300' : 'text-danger-400'
+              }`}>
+                {totaux.solde.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+                <span className="text-xl ml-1">€</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+                Solde
+              </span>
+            </div>
           </div>
 
-          {/* Cartes mobile */}
-          <AnimatedList maxHeightClass="max-h-[60vh]" className="md:hidden space-y-1.5">
-            {operationsFiltrees.map((op, i) => (
-              <OperationCard key={op.id} op={op} index={i} onModifier={ouvrirModal} />
-            ))}
-          </AnimatedList>
-        </>
-      )}
+          <div className="bg-white rounded-2xl border border-primary-100 p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <ScrollText size={16} className="text-primary-700" />
+              <h2 className="text-sm font-bold text-primary-900">Ventes et achats de matières premières</h2>
+            </div>
 
-      {!chargement && operations.length > 0 && (
-        <p className="text-xs text-primary-400 text-center mt-4 tabular-nums">
-          {operationsFiltrees.length} opération{operationsFiltrees.length !== 1 ? 's' : ''} affichée
-          {operationsFiltrees.length !== 1 ? 's' : ''}
-          {hasFiltresActifs ? ` sur ${operations.length} au total` : ''}
-        </p>
-      )}
-
-      {/* Modal correction */}
-      {operationAModifier && (
-        <div
-          className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
-          
-        >
-          <div className="bg-white rounded-2xl shadow-2xl w-full sm:max-w-md p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
-                <Pencil size={17} className="text-primary-700" />
-              </div>
+            {/* Filtres */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
               <div>
-                <h2 className="text-base font-bold text-primary-900 leading-tight">Modifier l'opération</h2>
-                <p className="text-xs text-primary-500 mt-0.5">
-                  <span className={`font-bold ${TYPE_TEXT_CLASS[operationAModifier.type]}`}>
-                    {TYPE_LABELS[operationAModifier.type]}
-                  </span>
-                  {' · '}
-                  {operationAModifier.pieces?.nom ?? operationAModifier.sous_ensembles?.nom ?? '—'}
-                  {' · '}
-                  {formatDate(operationAModifier.created_at)}
-                </p>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                  Recherche
+                </label>
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={recherche}
+                    onChange={(e) => setRecherche(e.target.value)}
+                    placeholder="Type, client, pièce…"
+                    className="w-full pl-8 pr-3 py-2 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                  Catégorie
+                </label>
+                <select
+                  value={filtreCategorie}
+                  onChange={(e) => setFiltreCategorie(e.target.value as CategorieLigne | '')}
+                  className="w-full border border-primary-200 rounded-xl px-3 py-2 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+                >
+                  <option value="">Toutes</option>
+                  <option value="vente">Vente</option>
+                  <option value="achat">Achat MP</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                  Date
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-400 flex-shrink-0">Du</span>
+                  <input
+                    type="date"
+                    value={filtreDateDebut}
+                    onChange={(e) => setFiltreDateDebut(e.target.value)}
+                    className="flex-1 min-w-0 border border-primary-200 rounded-xl px-2 py-2 text-xs text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-400 flex-shrink-0">Au</span>
+                  <input
+                    type="date"
+                    value={filtreDateFin}
+                    onChange={(e) => setFiltreDateFin(e.target.value)}
+                    className="flex-1 min-w-0 border border-primary-200 rounded-xl px-2 py-2 text-xs text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                </div>
               </div>
             </div>
 
-            {confirmationModif ? (
-              <div className="flex rounded-xl overflow-hidden border border-primary-100">
-                <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: '#22B84F' }} />
-                <div className="flex items-center gap-3 px-3.5 py-3 bg-white flex-1">
-                  <Check size={14} className="text-success-600 flex-shrink-0" />
-                  <p className="text-sm font-medium text-primary-900">Opération modifiée. Stock recalculé.</p>
-                </div>
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <p className="text-xs text-primary-500 tabular-nums">
+                {lignesFiltrees.length} résultat{lignesFiltrees.length !== 1 ? 's' : ''}
+              </p>
+              {hasFiltresActifs && (
+                <button
+                  onClick={resetFiltres}
+                  className="text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors flex-shrink-0"
+                >
+                  Réinitialiser les filtres
+                </button>
+              )}
+            </div>
+
+            {lignesFiltrees.length === 0 ? (
+              <div className="py-10 border border-dashed border-primary-200 rounded-xl text-center">
+                <p className="text-sm text-primary-400 italic">Aucun mouvement trouvé</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                    Delta (quantité){' '}
-                    <span className="text-primary-400 font-normal normal-case tracking-normal">
-                      — valeur actuelle : {operationAModifier.delta ?? 'N/A'}
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    value={nouveauDelta}
-                    onChange={(e) => setNouveauDelta(e.target.value)}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 text-base tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                    Commentaire
-                  </label>
-                  <textarea
-                    value={nouveauCommentaire}
-                    onChange={(e) => setNouveauCommentaire(e.target.value)}
-                    rows={3}
-                    placeholder="Raison de la correction…"
-                    className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
-                  />
-                </div>
-
-                {erreurModif && (
-                  <p className="text-danger-600 bg-danger-100 rounded-xl p-3 text-sm">{erreurModif}</p>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={fermerModal}
-                    className="flex-1 py-2.5 border border-primary-200 text-primary-700 text-sm font-medium rounded-xl hover:bg-primary-50 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={sauvegarderModification}
-                    disabled={chargementModif || !nouveauDelta.trim()}
-                    className="flex-1 py-2.5 bg-primary-900 hover:bg-primary-800 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
-                  >
-                    {chargementModif ? 'Enregistrement…' : 'Sauvegarder'}
-                  </button>
+              <div className="overflow-hidden rounded-xl border border-primary-100">
+                <div className="max-h-[560px] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
+                      <tr>
+                        <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3 whitespace-nowrap">Date</th>
+                        <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Catégorie</th>
+                        <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Type</th>
+                        <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Détail</th>
+                        <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3 whitespace-nowrap">Perçu HT</th>
+                        <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3 whitespace-nowrap">Dépensé HT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary-50">
+                      {lignesFiltrees.map((l) => (
+                        <tr key={l.id} className="hover:bg-primary-50 transition-colors">
+                          <td className="px-3 py-3 text-xs text-primary-500 whitespace-nowrap">
+                            {formatDate(l.date)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg whitespace-nowrap ${
+                              l.categorie === 'vente'
+                                ? 'bg-success-100 text-success-600'
+                                : 'bg-alert-100 text-alert-600'
+                            }`}>
+                              {l.categorie === 'vente' ? <ShoppingBag size={10} /> : <Truck size={10} />}
+                              {l.categorie === 'vente' ? 'Vente' : 'Achat MP'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 font-medium text-primary-900">
+                            <div className="max-w-[180px] truncate" title={l.type}>{l.type}</div>
+                          </td>
+                          <td className="px-3 py-3 text-xs text-primary-600">
+                            <div className="max-w-[180px] truncate" title={l.detail}>{l.detail}</div>
+                          </td>
+                          <td className="px-3 py-3 text-right text-sm font-bold text-success-600 tabular-nums whitespace-nowrap">
+                            {l.categorie === 'vente' ? formatMontant(l.montant) : ''}
+                          </td>
+                          <td className="px-3 py-3 text-right text-sm font-bold text-alert-600 tabular-nums whitespace-nowrap">
+                            {l.categorie === 'achat' ? formatMontant(l.montant) : ''}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   )

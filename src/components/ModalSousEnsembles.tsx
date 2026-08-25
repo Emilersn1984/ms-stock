@@ -1,12 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Plus, Pencil, Search, Layers, Wrench, X, Check, ChevronDown, ChevronUp, Camera } from 'lucide-react'
-import PhotoLightbox from '../components/PhotoLightbox'
-import AnimatedList from '../components/AnimatedList'
+import PhotoLightbox from './PhotoLightbox'
+import AnimatedList from './AnimatedList'
 import { useAnimatedListItem } from '../hooks/useAnimatedListItem'
 import { supabase } from '../lib/supabase'
-import { useStock } from '../hooks/useStock'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
-import { SousEnsemble } from '../types'
+import { Piece, SousEnsemble } from '../types'
+
+type Props = {
+  pieces: Piece[]
+  onClose: () => void
+}
 
 type ComposantLigne = {
   id: string
@@ -126,8 +130,7 @@ function ComposantCard({ comp, index, onSupprimer, onPhoto, estPatron }: {
   )
 }
 
-export default function Nomenclature() {
-  const { pieces } = useStock()
+export default function ModalSousEnsembles({ pieces, onClose }: Props) {
   const utilisateur = getUtilisateurStored()
   const estPatron = utilisateur?.role === 'patron'
   const [sousEnsembles, setSousEnsembles] = useState<SousEnsemble[]>([])
@@ -145,6 +148,7 @@ export default function Nomenclature() {
   const [previewUrlSE, setPreviewUrlSE] = useState<string | null>(null)
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null)
   const fileInputRefSE = useRef<HTMLInputElement>(null)
+
   const chargerSE = useCallback(async () => {
     const { data } = await supabase.from('sous_ensembles').select('*').order('nom')
     setSousEnsembles((data as SousEnsemble[]) ?? [])
@@ -233,17 +237,14 @@ export default function Nomenclature() {
         if (error) throw error
         if (fichierPhotoSE) {
           const ext = fichierPhotoSE.name.split('.').pop() ?? 'jpg'
-          console.log('Nomenclature - Uploading file:', fichierPhotoSE.name, 'to se-photos/', `${data.id}.${ext}`)
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from('se-photos')
             .upload(`${data.id}.${ext}`, fichierPhotoSE, { upsert: true })
-          console.log('Nomenclature - Upload result:', { uploadData, uploadError })
           if (!uploadError && uploadData) {
             const { data: { publicUrl } } = supabase.storage.from('se-photos').getPublicUrl(uploadData.path)
-            console.log('Nomenclature - Public URL:', publicUrl)
             await supabase.from('sous_ensembles').update({ photo_url: publicUrl }).eq('id', data.id)
           } else if (uploadError) {
-            console.error('Nomenclature - Upload error:', uploadError)
+            console.error('Sous-ensembles - Upload error:', uploadError)
           }
         }
         await chargerSE()
@@ -255,17 +256,14 @@ export default function Nomenclature() {
         }
         if (fichierPhotoSE) {
           const ext = fichierPhotoSE.name.split('.').pop() ?? 'jpg'
-          console.log('Nomenclature Edit - Uploading file:', fichierPhotoSE.name, 'to se-photos/', `${selectionne.id}.${ext}`)
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from('se-photos')
             .upload(`${selectionne.id}.${ext}`, fichierPhotoSE, { upsert: true })
-          console.log('Nomenclature Edit - Upload result:', { uploadData, uploadError })
           if (!uploadError && uploadData) {
             const { data: { publicUrl } } = supabase.storage.from('se-photos').getPublicUrl(uploadData.path)
-            console.log('Nomenclature Edit - Public URL:', publicUrl)
             payload.photo_url = publicUrl
           } else if (uploadError) {
-            console.error('Nomenclature Edit - Upload error:', uploadError)
+            console.error('Sous-ensembles - Upload error:', uploadError)
           }
         }
         const { error } = await supabase
@@ -318,205 +316,218 @@ export default function Nomenclature() {
   }
 
   return (
-    <div className="p-5 md:p-8">
+    <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col p-6">
 
-      {/* En-tête */}
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-primary-900 leading-none">Sous-ensembles</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 mt-1.5">
-            {sousEnsembles.length} sous-ensemble{sousEnsembles.length !== 1 ? 's' : ''} défini{sousEnsembles.length !== 1 ? 's' : ''}
-          </p>
+        {/* En-tête */}
+        <div className="flex items-start justify-between gap-3 mb-5 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+              <Layers size={17} className="text-primary-700" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-primary-900 leading-tight">Sous-ensembles</h2>
+              <p className="text-xs text-primary-500 mt-0.5">
+                {sousEnsembles.length} sous-ensemble{sousEnsembles.length !== 1 ? 's' : ''} défini{sousEnsembles.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {estPatron && (
+              <button
+                onClick={() => setModalSE({ ouvert: true, mode: 'creer', nom: '', description: '' })}
+                className="flex items-center gap-2 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+              >
+                <Plus size={15} />
+                <span className="hidden sm:inline">Nouveau sous-ensemble</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              title="Fermer"
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-primary-300 hover:text-primary-700 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
-        {estPatron && (
-          <button
-            onClick={() => setModalSE({ ouvert: true, mode: 'creer', nom: '', description: '' })}
-            className="flex items-center gap-2 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-          >
-            <Plus size={15} />
-            <span className="hidden sm:inline">Nouveau sous-ensemble</span>
-          </button>
-        )}
-      </div>
 
-      <div className="flex flex-col md:flex-row gap-5">
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-5 overflow-y-auto md:overflow-visible">
 
-        {/* Panneau gauche — liste SE */}
-        <div className="md:w-72 flex-shrink-0">
+          {/* Panneau gauche — liste SE */}
+          <div className="md:w-72 flex-shrink-0 flex flex-col min-h-0">
 
-          {/* Recherche */}
-          <div className="relative mb-3">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Rechercher…"
-              value={rechercheListe}
-              onChange={(e) => setRechercheListe(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
-            />
+            {/* Recherche */}
+            <div className="relative mb-3 flex-shrink-0">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Rechercher…"
+                value={rechercheListe}
+                onChange={(e) => setRechercheListe(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+              />
+            </div>
+
+            {/* Liste */}
+            {chargement ? (
+              <div className="flex items-center justify-center h-32">
+                <p className="text-primary-400 text-sm">Chargement…</p>
+              </div>
+            ) : seFiltres.length === 0 ? (
+              <div className="py-2 pl-3 border-l-2 border-primary-200">
+                <p className="text-sm text-primary-600 italic">
+                  {rechercheListe ? 'Aucun résultat' : 'Aucun sous-ensemble défini'}
+                </p>
+                {!rechercheListe && estPatron && (
+                  <button
+                    onClick={() => setModalSE({ ouvert: true, mode: 'creer', nom: '', description: '' })}
+                    className="mt-1.5 text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
+                  >
+                    + Créer le premier
+                  </button>
+                )}
+              </div>
+            ) : (
+              <AnimatedList maxHeightClass="max-h-[55vh]" className="space-y-1.5">
+                {seFiltres.map((se, index) => (
+                  <SeListItem
+                    key={se.id}
+                    se={se}
+                    index={index}
+                    isSelected={selectionne?.id === se.id}
+                    onSelect={() => setSelectionne(se)}
+                    onPhoto={setPhotoLightbox}
+                  />
+                ))}
+              </AnimatedList>
+            )}
           </div>
 
-          {/* Liste */}
-          {chargement ? (
-            <div className="flex items-center justify-center h-32">
-              <p className="text-primary-400 text-sm">Chargement…</p>
-            </div>
-          ) : seFiltres.length === 0 ? (
-            <div className="py-2 pl-3 border-l-2 border-primary-200">
-              <p className="text-sm text-primary-600 italic">
-                {rechercheListe ? 'Aucun résultat' : 'Aucun sous-ensemble défini'}
-              </p>
-              {!rechercheListe && estPatron && (
-                <button
-                  onClick={() => setModalSE({ ouvert: true, mode: 'creer', nom: '', description: '' })}
-                  className="mt-1.5 text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
-                >
-                  + Créer le premier
-                </button>
-              )}
-            </div>
-          ) : (
-            <AnimatedList maxHeightClass="max-h-[70vh]" className="space-y-1.5">
-              {seFiltres.map((se, index) => (
-                <SeListItem
-                  key={se.id}
-                  se={se}
-                  index={index}
-                  isSelected={selectionne?.id === se.id}
-                  onSelect={() => setSelectionne(se)}
-                  onPhoto={setPhotoLightbox}
-                />
-              ))}
-            </AnimatedList>
-          )}
-        </div>
-
-        {/* Panneau droit — détail SE */}
-        <div className="flex-1 min-w-0">
-          {!selectionne ? (
-            <div className="border border-dashed border-primary-200 rounded-2xl px-6 py-16 text-center">
-              <p className="text-sm text-primary-400 italic">
-                Sélectionnez un sous-ensemble pour voir sa composition
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* En-tête du SE sélectionné */}
-              <div className="flex items-start justify-between gap-3 mb-6">
-                <div className="flex items-start gap-3 min-w-0">
-                  {selectionne.photo_url && (
-                    <img
-                      src={selectionne.photo_url}
-                      alt=""
-                      className="w-12 h-12 rounded-xl object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => setPhotoLightbox(selectionne.photo_url!)}
-                    />
-                  )}
-                  <div className="min-w-0">
-                    <h2 className="text-xl font-bold text-primary-900 leading-tight">{selectionne.nom}</h2>
-                    {selectionne.description && (
-                      <p className="text-xs text-primary-500 mt-1">{selectionne.description}</p>
+          {/* Panneau droit — détail SE */}
+          <div className="flex-1 min-w-0">
+            {!selectionne ? (
+              <div className="border border-dashed border-primary-200 rounded-2xl px-6 py-16 text-center">
+                <p className="text-sm text-primary-400 italic">
+                  Sélectionnez un sous-ensemble pour voir sa composition
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* En-tête du SE sélectionné */}
+                <div className="flex items-start justify-between gap-3 mb-6">
+                  <div className="flex items-start gap-3 min-w-0">
+                    {selectionne.photo_url && (
+                      <img
+                        src={selectionne.photo_url}
+                        alt=""
+                        className="w-12 h-12 rounded-xl object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setPhotoLightbox(selectionne.photo_url!)}
+                      />
                     )}
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-bold text-primary-900 leading-tight">{selectionne.nom}</h3>
+                      {selectionne.description && (
+                        <p className="text-xs text-primary-500 mt-1">{selectionne.description}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {estPatron && (
-                  <button
-                    onClick={() => setModalSE({ ouvert: true, mode: 'editer', nom: selectionne.nom, description: selectionne.description ?? '' })}
-                    className="flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors flex-shrink-0"
-                  >
-                    <Pencil size={13} />
-                    Modifier
-                  </button>
-                )}
-              </div>
-
-              {/* Section composants */}
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
-                  Composants
-                </span>
-                <div className="flex-1 h-px bg-primary-100" />
-                {composants.length > 0 && (
-                  <span className="text-xs font-semibold text-primary-600 tabular-nums">{composants.length}</span>
-                )}
-                {estPatron && (
-                  <button
-                    onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
-                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 hover:text-primary-900 transition-colors"
-                  >
-                    <Plus size={11} />
-                    Ajouter
-                  </button>
-                )}
-              </div>
-
-              {chargementComp ? (
-                <div className="flex items-center justify-center h-32">
-                  <p className="text-primary-400 text-sm">Chargement…</p>
-                </div>
-              ) : composants.length === 0 ? (
-                <div className="py-10 border border-dashed border-primary-200 rounded-xl text-center">
-                  <p className="text-sm text-primary-400 italic mb-2">Aucun composant défini</p>
                   {estPatron && (
                     <button
-                      onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
-                      className="text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
+                      onClick={() => setModalSE({ ouvert: true, mode: 'editer', nom: selectionne.nom, description: selectionne.description ?? '' })}
+                      className="flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors flex-shrink-0"
                     >
-                      + Ajouter le premier composant
+                      <Pencil size={13} />
+                      Modifier
                     </button>
                   )}
                 </div>
-              ) : (() => {
-                const sousEnsemblesComp = composants.filter((c) => c.type === 'sous_ensemble')
-                const piecesComp = composants.filter((c) => c.type === 'piece')
-                return (
-                  <AnimatedList maxHeightClass="max-h-[60vh]" className="space-y-4 pr-1">
-                    {sousEnsemblesComp.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
-                            Sous-ensembles fabriqués
-                          </span>
-                          <div className="flex-1 h-px bg-primary-100" />
-                          <span className="text-xs font-semibold text-primary-600 tabular-nums">{sousEnsemblesComp.length}</span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {sousEnsemblesComp.map((comp, i) => (
-                            <ComposantCard key={comp.id} comp={comp} index={i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} estPatron={estPatron} />
-                          ))}
-                        </div>
-                      </div>
+
+                {/* Section composants */}
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
+                    Composants
+                  </span>
+                  <div className="flex-1 h-px bg-primary-100" />
+                  {composants.length > 0 && (
+                    <span className="text-xs font-semibold text-primary-600 tabular-nums">{composants.length}</span>
+                  )}
+                  {estPatron && (
+                    <button
+                      onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500 hover:text-primary-900 transition-colors"
+                    >
+                      <Plus size={11} />
+                      Ajouter
+                    </button>
+                  )}
+                </div>
+
+                {chargementComp ? (
+                  <div className="flex items-center justify-center h-32">
+                    <p className="text-primary-400 text-sm">Chargement…</p>
+                  </div>
+                ) : composants.length === 0 ? (
+                  <div className="py-10 border border-dashed border-primary-200 rounded-xl text-center">
+                    <p className="text-sm text-primary-400 italic mb-2">Aucun composant défini</p>
+                    {estPatron && (
+                      <button
+                        onClick={() => setModalComp({ ...MODAL_COMP_VIDE, ouvert: true })}
+                        className="text-xs font-medium text-primary-500 hover:text-primary-900 transition-colors"
+                      >
+                        + Ajouter le premier composant
+                      </button>
                     )}
-                    {piecesComp.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
-                            Pièces
-                          </span>
-                          <div className="flex-1 h-px bg-primary-100" />
-                          <span className="text-xs font-semibold text-primary-600 tabular-nums">{piecesComp.length}</span>
+                  </div>
+                ) : (() => {
+                  const sousEnsemblesComp = composants.filter((c) => c.type === 'sous_ensemble')
+                  const piecesComp = composants.filter((c) => c.type === 'piece')
+                  return (
+                    <AnimatedList maxHeightClass="max-h-[45vh]" className="space-y-4 pr-1">
+                      {sousEnsemblesComp.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
+                              Sous-ensembles fabriqués
+                            </span>
+                            <div className="flex-1 h-px bg-primary-100" />
+                            <span className="text-xs font-semibold text-primary-600 tabular-nums">{sousEnsemblesComp.length}</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {sousEnsemblesComp.map((comp, i) => (
+                              <ComposantCard key={comp.id} comp={comp} index={i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} estPatron={estPatron} />
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
-                          {piecesComp.map((comp, i) => (
-                            <ComposantCard key={comp.id} comp={comp} index={sousEnsemblesComp.length + i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} estPatron={estPatron} />
-                          ))}
+                      )}
+                      {piecesComp.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-700 whitespace-nowrap">
+                              Pièces
+                            </span>
+                            <div className="flex-1 h-px bg-primary-100" />
+                            <span className="text-xs font-semibold text-primary-600 tabular-nums">{piecesComp.length}</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {piecesComp.map((comp, i) => (
+                              <ComposantCard key={comp.id} comp={comp} index={sousEnsemblesComp.length + i} onSupprimer={supprimerComposant} onPhoto={setPhotoLightbox} estPatron={estPatron} />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </AnimatedList>
-                )
-              })()}
-            </>
-          )}
+                      )}
+                    </AnimatedList>
+                  )
+                })()}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Modal créer / éditer sous-ensemble */}
       {modalSE.ouvert && (
-        <div
-          className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
-          
-        >
+        <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
@@ -610,7 +621,7 @@ export default function Nomenclature() {
 
       {/* Modal ajouter composant */}
       {modalComp.ouvert && (
-        <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-primary-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-6">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
@@ -748,6 +759,7 @@ export default function Nomenclature() {
           </div>
         </div>
       )}
+
       {photoLightbox && <PhotoLightbox url={photoLightbox} onClose={() => setPhotoLightbox(null)} />}
     </div>
   )

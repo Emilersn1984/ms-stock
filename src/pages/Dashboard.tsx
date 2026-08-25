@@ -11,8 +11,9 @@ import { calcAchatsRecommandes } from '../utils/calcAchatsRecommandes'
 import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
 import { calcMaxFabricableDetail, calcBesoinPieces } from '../utils/calcDisponibilite'
 import { drapeauLangue } from '../utils/langues'
+import { CATEGORIE_LABEL, CATEGORIE_BADGE } from '../utils/categoriesExpedition'
 import { supabase } from '../lib/supabase'
-import type { SousEnsemble, AlerteManuelle, Piece, Expedition, CategorieExpedition } from '../types'
+import type { SousEnsemble, AlerteManuelle, Piece, Expedition } from '../types'
 
 type NomEntry = {
   piece_id: string | null
@@ -29,37 +30,6 @@ function dateAujourdhui() {
   })
 }
 
-function normaliserNom(nom: string) {
-  return nom
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-}
-
-const ORDRE_SOUS_ENSEMBLES = [
-  'colis termine ferme',
-  'bouee meca',
-  'tourelle',
-  'bb',
-  'enrouleur ferme',
-  'tambour resine',
-].map(normaliserNom)
-
-function trierSousEnsembles(sousEnsembles: SousEnsemble[]) {
-  const enStock = sousEnsembles.filter((se) => se.quantite > 0)
-  const horsStock = sousEnsembles.filter((se) => se.quantite <= 0)
-
-  const rangDe = (se: SousEnsemble) => {
-    const idx = ORDRE_SOUS_ENSEMBLES.indexOf(normaliserNom(se.nom))
-    return idx === -1 ? ORDRE_SOUS_ENSEMBLES.length : idx
-  }
-
-  enStock.sort((a, b) => rangDe(a) - rangDe(b) || a.nom.localeCompare(b.nom))
-  horsStock.sort((a, b) => rangDe(a) - rangDe(b) || a.nom.localeCompare(b.nom))
-
-  return [...enStock, ...horsStock]
-}
 
 function formatDateAlerte(dateStr: string) {
   return new Date(dateStr).toLocaleString('fr-FR', {
@@ -71,94 +41,41 @@ function formatDateAlerte(dateStr: string) {
 // ─── KPI Strip ─────────────────────────────────────────────────────────────────
 
 function KpiStrip({
-  productionHebdo, onChangeProduction, enregistrement,
-  colisFabricables, pieceLimitante, semainesAutonomie, ventesAExpedier,
+  chiffreAffairesMois, nombreCommandesMois, colisFabricables, pieceLimitante,
 }: {
-  productionHebdo: number
-  onChangeProduction: (val: number) => void
-  enregistrement: boolean
+  chiffreAffairesMois: number
+  nombreCommandesMois: number
   colisFabricables: number
   pieceLimitante: Piece | null
-  semainesAutonomie: number | null
-  ventesAExpedier: number
 }) {
-  const [editing, setEditing] = useState(false)
-  const [valeur, setValeur] = useState(String(productionHebdo))
-
-  useEffect(() => {
-    if (!editing) setValeur(String(productionHebdo))
-  }, [productionHebdo, editing])
-
-  function valider() {
-    const n = parseInt(valeur, 10)
-    if (!isNaN(n) && n >= 0) {
-      onChangeProduction(n)
-    } else {
-      setValeur(String(productionHebdo))
-    }
-    setEditing(false)
-  }
-
-  const fabricableAccent = colisFabricables === 0
-    ? 'text-danger-400'
-    : colisFabricables < productionHebdo
-      ? 'text-alert-400'
-      : 'text-success-300'
-
-  const autonomieAccent = semainesAutonomie === null
-    ? 'text-primary-400'
-    : semainesAutonomie < 1
-      ? 'text-danger-400'
-      : semainesAutonomie < 2
-        ? 'text-alert-400'
-        : 'text-success-300'
-
+  const moisCourant = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 bg-primary-900 rounded-2xl overflow-hidden mb-8">
-      <div className="px-6 py-5 flex flex-col gap-1.5 relative">
-        {editing ? (
-          <input
-            type="number"
-            min={0}
-            autoFocus
-            value={valeur}
-            onChange={(e) => setValeur(e.target.value)}
-            onFocus={(e) => e.currentTarget.select()}
-            onBlur={valider}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') valider()
-              if (e.key === 'Escape') { setValeur(String(productionHebdo)); setEditing(false) }
-            }}
-            className="w-24 bg-transparent text-5xl font-bold leading-none tracking-tight tabular-nums text-success-300 border-b-2 border-success-300 focus:outline-none"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            title="Cliquer pour régler la valeur manuellement"
-            className={`flex items-center gap-2 text-5xl font-bold leading-none tracking-tight tabular-nums text-left hover:opacity-80 transition-opacity ${
-              productionHebdo > 0 ? 'text-success-300' : 'text-primary-400'
-            }`}
-          >
-            {productionHebdo}
-            <Pencil size={15} className="text-primary-300" />
-          </button>
-        )}
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1 flex items-center gap-1.5">
-          Colis terminé fermé / semaine
-          <span className="px-1.5 py-0.5 rounded bg-primary-700 text-primary-100 text-[9px] normal-case tracking-normal font-bold">
-            Réglable
-          </span>
+    <div className="grid grid-cols-1 sm:grid-cols-3 bg-primary-900 rounded-2xl overflow-hidden mb-8">
+      <div className="px-6 py-5 flex flex-col gap-1.5">
+        <span className="text-5xl font-bold leading-none tracking-tight tabular-nums text-success-300">
+          {chiffreAffairesMois.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+          <span className="text-2xl ml-1">€</span>
         </span>
-        {enregistrement && (
-          <span className="absolute top-2 right-2 text-[9px] font-semibold text-primary-300">
-            Enregistrement…
-          </span>
-        )}
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+          Chiffre d'affaires HT du mois
+        </span>
+        <span className="text-[10px] text-primary-300 capitalize">{moisCourant}</span>
       </div>
 
       <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
-        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${fabricableAccent}`}>
+        <span className="text-5xl font-bold leading-none tracking-tight tabular-nums text-success-300">
+          {nombreCommandesMois}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
+          Commandes du mois
+        </span>
+        <span className="text-[10px] text-primary-300 capitalize">{moisCourant}</span>
+      </div>
+
+      <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
+        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${
+          colisFabricables === 0 ? 'text-danger-400' : 'text-success-300'
+        }`}>
           {colisFabricables}
         </span>
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
@@ -170,24 +87,68 @@ function KpiStrip({
           </span>
         )}
       </div>
+    </div>
+  )
+}
 
-      <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
-        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${autonomieAccent}`}>
-          {semainesAutonomie === null ? '—' : semainesAutonomie.toFixed(1)}
-        </span>
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
-          Semaines d'autonomie
-        </span>
-      </div>
+// ─── Réglage production hebdomadaire ───────────────────────────────────────────
 
-      <div className="px-6 py-5 flex flex-col gap-1.5 border-t sm:border-t-0 sm:border-l border-primary-800">
-        <span className={`text-5xl font-bold leading-none tracking-tight tabular-nums ${ventesAExpedier > 0 ? 'text-alert-400' : 'text-success-300'}`}>
-          {ventesAExpedier}
-        </span>
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200 mt-1">
-          Ventes à expédier
-        </span>
-      </div>
+// Objectif de vente mensuel. Alimente les achats recommandés, la consommation
+// 3D et toute la page Projections.
+function ReglageProduction({
+  objectifMensuel, onChange, enregistrement,
+}: {
+  objectifMensuel: number
+  onChange: (val: number) => void
+  enregistrement: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [valeur, setValeur] = useState(String(objectifMensuel))
+
+  useEffect(() => {
+    if (!editing) setValeur(String(objectifMensuel))
+  }, [objectifMensuel, editing])
+
+  function valider() {
+    const n = parseInt(valeur, 10)
+    if (!isNaN(n) && n >= 0) onChange(n)
+    else setValeur(String(objectifMensuel))
+    setEditing(false)
+  }
+
+  return (
+    <div className="flex items-center gap-2 mb-6 text-xs text-primary-600">
+      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-600">
+        Objectif de vente
+      </span>
+      {editing ? (
+        <input
+          type="number"
+          min={0}
+          autoFocus
+          value={valeur}
+          onChange={(e) => setValeur(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={valider}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') valider()
+            if (e.key === 'Escape') { setValeur(String(objectifMensuel)); setEditing(false) }
+          }}
+          className="w-16 border border-primary-200 rounded-lg px-2 py-1 text-sm font-bold tabular-nums text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Cliquer pour régler la valeur"
+          className="flex items-center gap-1.5 font-bold text-primary-900 hover:opacity-70 transition-opacity tabular-nums"
+        >
+          {objectifMensuel}
+          <Pencil size={11} className="text-primary-400" />
+        </button>
+      )}
+      <span>produits vendus par mois</span>
+      {enregistrement && <span className="text-primary-400">Enregistrement…</span>}
     </div>
   )
 }
@@ -293,19 +254,7 @@ function AchatRow({ achat, commandee }: { achat: AchatRecommande; commandee?: bo
 
 // ─── À expédier row ──────────────────────────────────────────────
 
-const CATEGORIE_BADGE_DASHBOARD: Record<CategorieExpedition, string> = {
-  vente: 'bg-success-100 text-success-600',
-  sav: 'bg-danger-100 text-danger-600',
-  demo: 'bg-alert-100 text-alert-600',
-  autre: 'bg-primary-100 text-primary-600',
-}
 
-const CATEGORIE_LABEL_DASHBOARD: Record<CategorieExpedition, string> = {
-  vente: 'Vente',
-  sav: 'SAV',
-  demo: 'Démo',
-  autre: 'Autre',
-}
 
 function AExpedierRow({ expedition, onClick }: { expedition: Expedition; onClick: () => void }) {
   const nomComplet = `${expedition.prenom_destinataire} ${expedition.nom_destinataire}`.trim() || '—'
@@ -319,8 +268,8 @@ function AExpedierRow({ expedition, onClick }: { expedition: Expedition; onClick
         <div className="flex items-start justify-between gap-2 mb-1">
           <span className="text-sm font-medium text-primary-900 truncate flex-1">{nomComplet}</span>
           {expedition.categorie && (
-            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg flex-shrink-0 ${CATEGORIE_BADGE_DASHBOARD[expedition.categorie]}`}>
-              {CATEGORIE_LABEL_DASHBOARD[expedition.categorie]}
+            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg flex-shrink-0 ${CATEGORIE_BADGE[expedition.categorie]}`}>
+              {CATEGORIE_LABEL[expedition.categorie]}
             </span>
           )}
         </div>
@@ -346,20 +295,6 @@ function AExpedierRow({ expedition, onClick }: { expedition: Expedition; onClick
 
 // ─── Sous-ensemble card ─────────────────────────────────────────────────────────
 
-function SousEnsembleCard({ se }: { se: SousEnsemble }) {
-  const ok = se.quantite > 0
-  return (
-    <div className={`rounded-xl p-4 h-24 flex flex-col justify-between ${
-      ok ? 'bg-primary-900' : 'bg-white border border-dashed border-primary-200'
-    }`}>
-      <p className={`text-[11px] font-medium truncate leading-tight ${ok ? 'text-white' : 'text-primary-700'}`}>{se.nom}</p>
-      <p className={`text-3xl font-bold leading-none tabular-nums ${
-        ok ? 'text-success-300' : 'text-primary-500'
-      }`}>{se.quantite}</p>
-    </div>
-  )
-}
-
 // ─── Etat vide ─────────────────────────────────────────────────────────────────
 
 function EtatVide({ texte }: { texte: string }) {
@@ -376,9 +311,9 @@ export default function Dashboard() {
   const estOuvrier = utilisateur?.role === 'ouvrier'
   const { pieces, chargement: chargementStock } = useStock()
   const { alertes: toutesLesAlertes, chargement: chargementAlertes, creerAlerte, resoudreAlerte } = useAlertes()
-  const { colisParSemaine, definirColisParSemaine, chargement: chargementParam, enregistrement } = useParametreProduction()
+  const { objectifVenteMensuel, objectifVenteHebdo, definirObjectifVenteMensuel, chargement: chargementParam, enregistrement } = useParametreProduction()
   const { commandesEnCours } = useCommandes()
-  const { aExpedier, chargement: chargementExpeditions } = useExpeditions()
+  const { aExpedier, expeditions, chargement: chargementExpeditions } = useExpeditions()
 
   const alertes = useMemo(
     () => estOuvrier
@@ -418,8 +353,8 @@ export default function Dashboard() {
   // réglée à la main, via l'explosion complète de la nomenclature (BOM). Les
   // productions réellement déclarées dans l'onglet Fabrication sont ignorées.
   const consommationParPiece = useMemo(
-    () => (colisTermineFermeId ? calcBesoinPieces(colisTermineFermeId, colisParSemaine, nomenclature) : new Map<string, number>()),
-    [colisTermineFermeId, colisParSemaine, nomenclature]
+    () => (colisTermineFermeId ? calcBesoinPieces(colisTermineFermeId, objectifVenteHebdo, nomenclature) : new Map<string, number>()),
+    [colisTermineFermeId, objectifVenteHebdo, nomenclature]
   )
 
   const achatsRecommandes = useMemo(
@@ -432,19 +367,24 @@ export default function Dashboard() {
     [commandesEnCours]
   )
 
-  const ventesAExpedier = useMemo(
-    () => aExpedier.filter((e) => e.categorie === 'vente').length,
-    [aExpedier]
-  )
+  // Ventes du mois calendaire en cours, d'après la date de commande.
+  const { chiffreAffairesMois, nombreCommandesMois } = useMemo(() => {
+    const maintenant = new Date()
+    const debutMois = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1)
+    const duMois = expeditions.filter((e) => new Date(e.date_commande) >= debutMois)
+    return {
+      chiffreAffairesMois: duMois.reduce((somme, e) => somme + (e.montant_paye ?? 0), 0),
+      nombreCommandesMois: duMois.length,
+    }
+  }, [expeditions])
 
   const { max: colisFabricables, pieceLimitante } = useMemo(
     () => (colisTermineFermeId ? calcMaxFabricableDetail(colisTermineFermeId, pieces, nomenclature) : { max: 0, pieceLimitante: null }),
     [colisTermineFermeId, pieces, nomenclature]
   )
 
-  const semainesAutonomie = colisParSemaine > 0 ? colisFabricables / colisParSemaine : null
 
-  const conso3DActive = colisParSemaine > 0
+  const conso3DActive = objectifVenteMensuel > 0
 
   const chargement = chargementStock || chargementAlertes || chargementSE || chargementParam || chargementExpeditions
 
@@ -492,32 +432,17 @@ export default function Dashboard() {
         <>
           {/* KPI strip */}
           <KpiStrip
-            productionHebdo={colisParSemaine}
-            onChangeProduction={definirColisParSemaine}
-            enregistrement={enregistrement}
+            chiffreAffairesMois={chiffreAffairesMois}
+            nombreCommandesMois={nombreCommandesMois}
             colisFabricables={colisFabricables}
             pieceLimitante={pieceLimitante}
-            semainesAutonomie={semainesAutonomie}
-            ventesAExpedier={ventesAExpedier}
           />
 
-          {/* Paquet 1 — Sous-ensembles disponibles (juste sous le bandeau KPI) */}
-          <BentoCard className="mb-6">
-            <SectionLabel
-              texte="Sous-ensembles disponibles"
-              count={`${sousEnsembles.filter((se) => se.quantite > 0).length} / ${sousEnsembles.length}`}
-            />
-            {sousEnsembles.length === 0 ? (
-              <EtatVide texte="Aucun sous-ensemble défini" />
-            ) : (
-              <div className="overflow-y-auto max-h-[260px] pr-1">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {trierSousEnsembles(sousEnsembles)
-                    .map((se) => <SousEnsembleCard key={se.id} se={se} />)}
-                </div>
-              </div>
-            )}
-          </BentoCard>
+          <ReglageProduction
+            objectifMensuel={objectifVenteMensuel}
+            onChange={definirObjectifVenteMensuel}
+            enregistrement={enregistrement}
+          />
 
           {/* Grille bento — achats recommandés et impressions 3D côte à côte */}
           <div className={`grid grid-cols-1 gap-5 mb-6 ${estOuvrier ? '' : 'lg:grid-cols-3'}`}>

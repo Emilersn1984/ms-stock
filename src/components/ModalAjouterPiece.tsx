@@ -19,6 +19,8 @@ type FormData = {
   seuil_vert: string
   categorie: string
   delai_appro: string
+  prix_unitaire: string
+  moq: string
   est_impression_3d: boolean
   temps_impression_heures: string
 }
@@ -31,6 +33,8 @@ const FORM_INIT: FormData = {
   seuil_vert: '10',
   categorie: '',
   delai_appro: '',
+  prix_unitaire: '',
+  moq: '',
   est_impression_3d: false,
   temps_impression_heures: '',
 }
@@ -78,6 +82,8 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
           categorie: form.categorie.trim() || null,
           archivee: false,
           delai_appro: form.est_impression_3d ? null : (form.delai_appro.trim() ? parseInt(form.delai_appro, 10) || null : null),
+          prix_unitaire: form.prix_unitaire.trim() ? Number(form.prix_unitaire.replace(',', '.')) || null : null,
+          moq: form.moq.trim() ? parseInt(form.moq, 10) || null : null,
           est_impression_3d: form.est_impression_3d,
           temps_impression_heures: form.est_impression_3d
             ? (form.temps_impression_heures.trim() ? parseFloat(form.temps_impression_heures) || null : null)
@@ -279,6 +285,37 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
               </p>
             </div>
           )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Prix unitaire{' '}
+                <span className="text-primary-400 font-normal normal-case tracking-normal">(€ HT)</span>
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.prix_unitaire}
+                onChange={(e) => setField('prix_unitaire', e.target.value)}
+                placeholder="Ex : 3.50"
+                className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 placeholder-primary-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                MOQ{' '}
+                <span className="text-primary-400 font-normal normal-case tracking-normal">(qté mini)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.moq}
+                onChange={(e) => setField('moq', e.target.value)}
+                placeholder="Ex : 100"
+                className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 placeholder-primary-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+          </div>
 
           {/* Seuils */}
           <div>

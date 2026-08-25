@@ -30,7 +30,7 @@ export function useAlertes() {
     charger()
 
     const channel = supabase
-      .channel('alertes-realtime')
+      .channel(`alertes-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'alertes_manuelles' },

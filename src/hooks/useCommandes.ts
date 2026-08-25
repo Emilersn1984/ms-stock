@@ -25,7 +25,7 @@ export function useCommandes() {
     chargerCommandes()
 
     const channel = supabase
-      .channel('commandes-realtime')
+      .channel(`commandes-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'commandes' },

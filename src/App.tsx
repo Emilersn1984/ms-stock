@@ -5,8 +5,8 @@ import Dashboard from './pages/Dashboard'
 import Stock from './pages/Stock'
 import Commandes from './pages/Commandes'
 import ExpeditionPage from './pages/Expedition'
-import Fabrication from './pages/Fabrication'
-import Nomenclature from './pages/Nomenclature'
+import Ventes from './pages/Ventes'
+import Projections from './pages/Projections'
 import Historique from './pages/Historique'
 import RouteProtegee from './components/RouteProtegee'
 
@@ -24,11 +24,19 @@ function App() {
           />
           <Route path="/livraisons" element={<Navigate to="/commandes" replace />} />
           <Route
+            path="/ventes"
+            element={<RouteProtegee rolesInterdits={['ouvrier']}><Ventes /></RouteProtegee>}
+          />
+          <Route
             path="/expedition"
             element={<RouteProtegee rolesInterdits={['ouvrier']}><ExpeditionPage /></RouteProtegee>}
           />
-          <Route path="/fabrication" element={<Fabrication />} />
-          <Route path="/nomenclature" element={<Nomenclature />} />
+          <Route path="/fabrication" element={<Navigate to="/stock" replace />} />
+          <Route path="/nomenclature" element={<Navigate to="/stock" replace />} />
+          <Route
+            path="/projections"
+            element={<RouteProtegee rolesInterdits={['ouvrier']}><Projections /></RouteProtegee>}
+          />
           <Route
             path="/historique"
             element={<RouteProtegee rolesInterdits={['ouvrier']}><Historique /></RouteProtegee>}

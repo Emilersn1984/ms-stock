@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
 import { useUtilisateur } from '../hooks/useUtilisateur'
 import Header from '../components/Header'
-import { Home, Package, Truck, Settings, ClipboardList, ScrollText, Send } from 'lucide-react'
+import { Home, Package, Truck, ScrollText, Send, ShoppingBag, LineChart } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 type NavItem = {
@@ -12,18 +13,21 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Tableau de bord', icon: Home },
-  { to: '/stock', label: 'Stock', icon: Package },
-  { to: '/nomenclature', label: 'Sous-ensembles', icon: ClipboardList },
-  { to: '/commandes', label: 'Commandes', icon: Truck },
+  { to: '/ventes', label: 'Ventes', icon: ShoppingBag },
   { to: '/expedition', label: 'Expédition', icon: Send },
-  { to: '/fabrication', label: 'Fabrication', icon: Settings },
+  { to: '/stock', label: 'Stock', icon: Package },
+  { to: '/commandes', label: 'Achats MP', icon: Truck },
+  { to: '/projections', label: 'Projections', icon: LineChart },
   { to: '/historique', label: 'Historique', icon: ScrollText },
 ]
 
-const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/expedition', '/historique']
+const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/ventes', '/expedition', '/historique', '/projections']
 
 export default function Layout() {
   const { utilisateur, deconnecter } = useUtilisateur()
+  // Le bandeau se replie dès qu'on quitte le haut de la page, pour rendre
+  // sa hauteur au contenu (tableaux longs de la page Projections).
+  const [enHautDePage, setEnHautDePage] = useState(true)
 
   if (!utilisateur) {
     return <Navigate to="/login" replace />
@@ -35,7 +39,9 @@ export default function Layout() {
 
   return (
     <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <Header utilisateur={utilisateur} onDeconnecter={deconnecter} />
+      <div className={`flex-shrink-0 overflow-hidden ${enHautDePage ? "" : "h-0"}`}>
+        <Header utilisateur={utilisateur} onDeconnecter={deconnecter} />
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar desktop */}
@@ -59,7 +65,10 @@ export default function Layout() {
         </aside>
 
         {/* Contenu principal */}
-        <main className="flex-1 overflow-auto pb-20 md:pb-0">
+        <main
+          className="flex-1 overflow-auto pb-20 md:pb-0"
+          onScroll={(e) => setEnHautDePage(e.currentTarget.scrollTop < 8)}
+        >
           <Outlet />
         </main>
       </div>

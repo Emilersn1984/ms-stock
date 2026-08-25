@@ -21,6 +21,8 @@ export type Piece = {
   archivee: boolean
   photo_url: string | null
   delai_appro: number | null
+  prix_unitaire: number | null
+  moq: number | null
   est_impression_3d: boolean
   temps_impression_heures: number | null
   created_at: string
@@ -91,6 +93,10 @@ export type Commande = {
   numero_suivi: string | null
   statut: StatutCommande
   date_reception: string | null
+  montant_paye: number | null
+  // Lignes d'une même commande multi-références. Le montant n'est porté que
+  // par la première ligne du groupe.
+  groupe_id: string | null
   utilisateur_id: string | null
   created_at: string
   pieces?: { nom: string } | null
@@ -98,11 +104,15 @@ export type Commande = {
 
 export type Langue = 'fr' | 'en' | 'de' | 'es' | 'it' | 'nl' | 'pt'
 
-export type CategorieExpedition = 'vente' | 'sav' | 'demo' | 'autre'
+export type CategorieExpedition = 'vente' | 'sav' | 'demo' | 'autre' | 'don'
 
 export type StatutExpedition = 'a_expedier' | 'envoye' | 'receptionne'
 
 export type OrigineExpedition = 'manuel' | 'stripe'
+
+// Origine commerciale d'une vente, à ne pas confondre avec OrigineExpedition
+// qui décrit la façon dont la ligne est entrée dans l'application.
+export type OrigineVente = 'web' | 'salon' | 'b2b' | 'autre'
 
 export type Client = {
   id: string
@@ -144,6 +154,10 @@ export type Expedition = {
   transporteur: Transporteur | null
   numero_suivi: string | null
   numero_serie: string | null
+  montant_paye: number | null
+  origine_vente: OrigineVente | null
+  commentaire_origine: string | null
+  type_bateau: string | null
   items: ExpeditionItem[]
   date_commande: string
   date_envoi_previsionnelle: string | null
@@ -152,4 +166,21 @@ export type Expedition = {
   utilisateur_id: string | null
   created_at: string
   clients?: { id: string; nom: string; prenom: string } | null
+}
+
+export type SectionProjection = 'recettes' | 'depenses'
+
+// Une ligne du plan de trésorerie sur 3 mois. Un montant à NULL sur une ligne
+// « auto » signifie « garder la valeur calculée » ; une valeur saisie la remplace.
+export type LigneProjection = {
+  id: string
+  section: SectionProjection
+  categorie: string
+  libelle: string
+  ordre: number
+  montant_m0: number | null
+  montant_m1: number | null
+  montant_m2: number | null
+  auto: 'ca' | 'achats_mp' | null
+  created_at: string
 }

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ChevronDown, Search, Plus, Pencil, ArrowUpDown, RotateCcw } from 'lucide-react'
+import { ChevronDown, Search, Plus, Pencil, ArrowUpDown, RotateCcw, Layers, Factory } from 'lucide-react'
 import PhotoLightbox from '../components/PhotoLightbox'
 import AnimatedList from '../components/AnimatedList'
 import { supabase } from '../lib/supabase'
@@ -11,6 +11,9 @@ import { getCouleurSeuil, COULEUR_LABEL } from '../utils/couleurSeuil'
 import ModalModifierQuantite from '../components/ModalModifierQuantite'
 import ModalAjouterPiece from '../components/ModalAjouterPiece'
 import ModalModifierSE from '../components/ModalModifierSE'
+import ModalSousEnsembles from '../components/ModalSousEnsembles'
+import CarteSousEnsembles from '../components/CarteSousEnsembles'
+import ModalFabrication from '../components/ModalFabrication'
 import { Piece, SousEnsemble, CouleurSeuil } from '../types'
 
 const ACCENT_HEX: Record<CouleurSeuil, string> = {
@@ -29,74 +32,6 @@ function SectionLabel({ texte, count, accent }: { texte: string; count?: string;
       <span className={`text-[10px] font-bold uppercase tracking-[0.18em] whitespace-nowrap ${accent ?? 'text-primary-700'}`}>{texte}</span>
       <div className="flex-1 h-px bg-primary-100" />
       {count !== undefined && <span className="text-xs font-semibold text-primary-600 tabular-nums">{count}</span>}
-    </div>
-  )
-}
-
-function SeRow({ se, index, onCorriger, onPhoto, canEdit }: {
-  se: SousEnsemble
-  index: number
-  onCorriger: (se: SousEnsemble) => void
-  onPhoto: (url: string) => void
-  canEdit: boolean
-}) {
-  const { ref, style } = useAnimatedListItem<HTMLTableRowElement>(index)
-  return (
-    <tr ref={ref} style={style} className="hover:bg-primary-50 transition-colors">
-      <td className="border-l-4 px-4 py-3.5" style={{ borderLeftColor: '#22B84F' }}>
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="min-w-0">
-            <p className="font-medium text-primary-900">{se.nom}</p>
-            {se.description && <p className="text-xs text-primary-500 mt-0.5 truncate max-w-xs">{se.description}</p>}
-          </div>
-          {se.photo_url && (
-            <img src={se.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(se.photo_url!)} />
-          )}
-        </div>
-      </td>
-      <td className="px-5 py-3.5 text-right">
-        <span className="text-xl font-bold tabular-nums text-success-600">{se.quantite}</span>
-      </td>
-      <td className="px-5 py-3.5 text-right">
-        {canEdit && (
-          <button onClick={() => onCorriger(se)} className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors">
-            Corriger
-          </button>
-        )}
-      </td>
-    </tr>
-  )
-}
-
-function SeCard({ se, index, onCorriger, onPhoto, canEdit }: {
-  se: SousEnsemble
-  index: number
-  onCorriger: (se: SousEnsemble) => void
-  onPhoto: (url: string) => void
-  canEdit: boolean
-}) {
-  const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
-  return (
-    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
-      <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: '#22B84F' }} />
-      <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
-          {se.description && <p className="text-xs text-primary-500 mt-0.5 truncate">{se.description}</p>}
-        </div>
-        {se.photo_url && (
-          <img src={se.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(se.photo_url!)} />
-        )}
-        <div className="flex-shrink-0 text-right">
-          <p className="text-xl font-bold tabular-nums text-success-600 leading-tight">{se.quantite}</p>
-          <p className="text-[10px] uppercase tracking-wide font-bold text-success-600">assemblé{se.quantite !== 1 ? 's' : ''}</p>
-        </div>
-        {canEdit && (
-          <button onClick={() => onCorriger(se)} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1" title="Corriger le stock">
-            <Pencil size={14} />
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -142,6 +77,20 @@ function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
           <span className="text-primary-300">—</span>
         )}
       </td>
+      <td className="px-5 py-3.5 text-right">
+        {piece.prix_unitaire != null ? (
+          <span className="text-sm text-primary-700 tabular-nums whitespace-nowrap">
+            {piece.prix_unitaire.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+          </span>
+        ) : (
+          <span className="text-primary-300">—</span>
+        )}
+      </td>
+      <td className="px-5 py-3.5 text-right">
+        {piece.moq != null
+          ? <span className="text-sm text-primary-700 tabular-nums">{piece.moq}</span>
+          : <span className="text-primary-300">—</span>}
+      </td>
       <td className="px-5 py-3.5 text-center">
         <span className={`text-xs font-bold uppercase tracking-wide ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</span>
       </td>
@@ -173,6 +122,13 @@ function PieceCard({ piece, index, onModifier, onPhoto, canEdit }: {
           <p className="text-sm font-medium text-primary-900 truncate">{piece.nom}</p>
           {piece.description && <p className="text-xs text-primary-400 mt-0.5 truncate">{piece.description}</p>}
           {piece.categorie && <p className="text-xs text-primary-500 mt-0.5">{piece.categorie}</p>}
+          {(piece.prix_unitaire != null || piece.moq != null) && (
+            <p className="text-xs text-primary-400 mt-0.5 tabular-nums">
+              {piece.prix_unitaire != null && `${piece.prix_unitaire.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € HT`}
+              {piece.prix_unitaire != null && piece.moq != null && ' · '}
+              {piece.moq != null && `MOQ ${piece.moq}`}
+            </p>
+          )}
         </div>
         {piece.photo_url && (
           <img src={piece.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(piece.photo_url!)} />
@@ -219,7 +175,6 @@ function KpiStrip({ rouge, jaune, vert }: { rouge: number; jaune: number; vert: 
 export default function Stock() {
   const { pieces, chargement, erreur } = useStock()
   const { sousEnsembles: sousEnsemblesTous } = useSousEnsemblesStock()
-  const sousEnsemblesEnStock = sousEnsemblesTous.filter((se) => se.quantite > 0)
   const utilisateur = getUtilisateurStored()
 
   const [recherche, setRecherche] = useState('')
@@ -233,6 +188,8 @@ export default function Stock() {
   const [pieceAModifier, setPieceAModifier] = useState<Piece | null>(null)
   const [seAModifier, setSeAModifier] = useState<SousEnsemble | null>(null)
   const [showAjouter, setShowAjouter] = useState(false)
+  const [showSousEnsembles, setShowSousEnsembles] = useState(false)
+  const [showFabrication, setShowFabrication] = useState(false)
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null)
   const [triColonne, setTriColonne] = useState<'quantite' | 'delai' | 'statut' | null>(null)
 
@@ -345,15 +302,31 @@ export default function Stock() {
             {pieces.length} pièce{pieces.length !== 1 ? 's' : ''} référencée{pieces.length !== 1 ? 's' : ''}
           </p>
         </div>
-        {utilisateur?.role === 'patron' && (
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            onClick={() => setShowAjouter(true)}
-            className="flex items-center gap-2 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            onClick={() => setShowSousEnsembles(true)}
+            className="flex items-center gap-2 border border-primary-200 text-primary-700 hover:bg-primary-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
           >
-            <Plus size={15} />
-            <span className="hidden sm:inline">Ajouter une pièce</span>
+            <Layers size={15} />
+            <span className="hidden sm:inline">Gérer les sous-ensembles</span>
           </button>
-        )}
+          <button
+            onClick={() => setShowFabrication(true)}
+            className="flex items-center gap-2 border border-primary-200 text-primary-700 hover:bg-primary-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+          >
+            <Factory size={15} />
+            <span className="hidden sm:inline">Fabrication</span>
+          </button>
+          {utilisateur?.role === 'patron' && (
+            <button
+              onClick={() => setShowAjouter(true)}
+              className="flex items-center gap-2 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            >
+              <Plus size={15} />
+              <span className="hidden sm:inline">Ajouter une référence</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -361,56 +334,8 @@ export default function Stock() {
         <KpiStrip rouge={stats.rouge} jaune={stats.jaune} vert={stats.vert} />
       )}
 
-      {/* Sous-ensembles fabriqués */}
-      {sousEnsemblesEnStock.length > 0 && (
-        <div className="mb-8">
-          <SectionLabel
-            texte="Sous-ensembles fabriqués"
-            count={`${sousEnsemblesEnStock.length} assemblé${sousEnsemblesEnStock.length !== 1 ? 's' : ''}`}
-          />
-
-          {/* Desktop */}
-          <div className="hidden md:block bg-white rounded-2xl border border-primary-100 overflow-hidden">
-            <AnimatedList maxHeightClass="max-h-[40vh]" fadeColor="#FFFFFF">
-              <table className="w-full">
-                <thead className="bg-primary-50 border-b border-primary-100 sticky top-0 z-[1]">
-                  <tr>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Sous-ensemble</th>
-                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">Quantité</th>
-                    <th className="px-5 py-3.5" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-primary-50">
-                  {sousEnsemblesEnStock.map((se, i) => (
-                    <SeRow
-                      key={se.id}
-                      se={se}
-                      index={i}
-                      canEdit={!!utilisateur}
-                      onCorriger={(s) => setSeAModifier(s)}
-                      onPhoto={(url) => setPhotoLightbox(url)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </AnimatedList>
-          </div>
-
-          {/* Mobile */}
-          <AnimatedList maxHeightClass="max-h-[40vh]" className="md:hidden space-y-1.5">
-            {sousEnsemblesEnStock.map((se, i) => (
-              <SeCard
-                key={se.id}
-                se={se}
-                index={i}
-                canEdit={!!utilisateur}
-                onCorriger={(s) => setSeAModifier(s)}
-                onPhoto={(url) => setPhotoLightbox(url)}
-              />
-            ))}
-          </AnimatedList>
-        </div>
-      )}
+      {/* Sous-ensembles disponibles */}
+      <CarteSousEnsembles sousEnsembles={sousEnsemblesTous} onSelectionner={setSeAModifier} />
 
       {/* Pièces */}
       <SectionLabel
@@ -592,6 +517,8 @@ export default function Stock() {
                           : <ArrowUpDown className="w-3 h-3 opacity-50" />}
                       </button>
                     </th>
+                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5 whitespace-nowrap">Prix unit.</th>
+                    <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-5 py-3.5">MOQ</th>
                     <th className="px-5 py-3.5 text-center">
                       <button
                         onClick={() => basculerTri('statut')}
@@ -671,6 +598,17 @@ export default function Stock() {
           categoriesExistantes={categories}
           onClose={() => setShowAjouter(false)}
           onSuccess={() => {}}
+        />
+      )}
+
+      {showFabrication && (
+        <ModalFabrication pieces={pieces} onClose={() => setShowFabrication(false)} />
+      )}
+
+      {showSousEnsembles && (
+        <ModalSousEnsembles
+          pieces={pieces}
+          onClose={() => setShowSousEnsembles(false)}
         />
       )}
     </div>
