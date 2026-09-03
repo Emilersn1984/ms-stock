@@ -7,7 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { drapeauLangue, labelLangue, LANGUES } from '../utils/langues'
 import { CATEGORIE_LABEL, CATEGORIE_BADGE, CATEGORIES_TOUTES } from '../utils/categoriesExpedition'
-import { ORIGINES_VENTE, ORIGINE_VENTE_LABEL } from '../utils/originesVente'
+import { ORIGINES_VENTE, ORIGINE_VENTE_LABEL, originesDeLaVente } from '../utils/originesVente'
 import ModalVente from '../components/ModalVente'
 import GraphiqueCaMensuel from '../components/GraphiqueCaMensuel'
 import { Expedition, CategorieExpedition, OrigineVente, Langue } from '../types'
@@ -71,7 +71,7 @@ export default function Ventes() {
       }
       if (filtreLangue && v.langue !== filtreLangue) return false
       if (filtreCategorie && v.categorie !== filtreCategorie) return false
-      if (filtreOrigine && v.origine_vente !== filtreOrigine) return false
+      if (filtreOrigine && !originesDeLaVente(v).includes(filtreOrigine)) return false
       if (filtreDateDebut && new Date(v.date_commande) < new Date(filtreDateDebut)) return false
       if (filtreDateFin) {
         // Borne haute inclusive : on compare à la fin de la journée choisie.
@@ -100,7 +100,7 @@ export default function Ventes() {
       v.adresse ?? '',
       v.langue ? labelLangue(v.langue) : '',
       v.categorie ? CATEGORIE_LABEL[v.categorie] : '',
-      v.origine_vente ? ORIGINE_VENTE_LABEL[v.origine_vente] : '',
+      originesDeLaVente(v).map((o) => ORIGINE_VENTE_LABEL[o]).join(" + "),
       v.commentaire_origine ?? '',
       v.type_bateau ?? '',
       v.montant_paye != null ? String(v.montant_paye).replace('.', ',') : '',
@@ -344,8 +344,10 @@ export default function Ventes() {
                           )}
                         </td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap">
-                          {v.origine_vente ? (
-                            <span className="text-primary-700 font-medium">{ORIGINE_VENTE_LABEL[v.origine_vente]}</span>
+                          {originesDeLaVente(v).length > 0 ? (
+                            <span className="text-primary-700 font-medium">
+                              {originesDeLaVente(v).map((o) => ORIGINE_VENTE_LABEL[o]).join(' + ')}
+                            </span>
                           ) : (
                             <span className="text-primary-400">—</span>
                           )}

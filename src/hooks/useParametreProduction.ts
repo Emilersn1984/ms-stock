@@ -16,6 +16,8 @@ export function useParametreProduction() {
   const [tresorerieInitiale, setTresorerieInitiale] = useState(0)
   // Premier des 3 mois affichés dans Projections, au format YYYY-MM-DD.
   const [projectionsMoisDebut, setProjectionsMoisDebut] = useState<string | null>(null)
+  // CA TTC réalisé, saisi à la main. NULL = valeur calculée depuis les ventes.
+  const [caTtcRealise, setCaTtcRealise] = useState<number | null>(null)
   // Sous-ensemble considéré comme une « bouée complète » à l'expédition.
   const [sousEnsembleBoueeId, setSousEnsembleBoueeId] = useState<string | null>(null)
   const [chargement, setChargement] = useState(true)
@@ -25,7 +27,7 @@ export function useParametreProduction() {
   const charger = useCallback(async () => {
     const { data, error } = await supabase
       .from('parametres')
-      .select('objectif_vente_mensuel, prix_vente_moyen_ttc, tresorerie_initiale, sous_ensemble_bouee_id, projections_mois_debut')
+      .select('objectif_vente_mensuel, prix_vente_moyen_ttc, tresorerie_initiale, sous_ensemble_bouee_id, projections_mois_debut, ca_ttc_realise')
       .eq('id', 1)
       .single()
 
@@ -37,6 +39,7 @@ export function useParametreProduction() {
       setTresorerieInitiale(Number(data?.tresorerie_initiale ?? 0))
       setSousEnsembleBoueeId((data?.sous_ensemble_bouee_id as string | null) ?? null)
       setProjectionsMoisDebut((data?.projections_mois_debut as string | null) ?? null)
+      setCaTtcRealise(data?.ca_ttc_realise != null ? Number(data.ca_ttc_realise) : null)
     }
     setChargement(false)
   }, [])
@@ -84,6 +87,18 @@ export function useParametreProduction() {
     await enregistrerParametre('tresorerie_initiale', valeur)
   }, [enregistrerParametre])
 
+  // NULL remet la valeur en calcul automatique.
+  const definirCaTtcRealise = useCallback(async (valeur: number | null) => {
+    setCaTtcRealise(valeur)
+    setEnregistrement(true)
+    const { error } = await supabase
+      .from('parametres')
+      .update({ ca_ttc_realise: valeur, updated_at: new Date().toISOString() })
+      .eq('id', 1)
+    if (error) setErreur(error.message)
+    setEnregistrement(false)
+  }, [])
+
   // Avance d'un mois la fenêtre de projection. Déclenché à la main.
   const avancerMoisProjections = useCallback(async () => {
     const base = projectionsMoisDebut ? new Date(projectionsMoisDebut) : new Date()
@@ -109,9 +124,11 @@ export function useParametreProduction() {
     tresorerieInitiale,
     sousEnsembleBoueeId,
     projectionsMoisDebut,
+    caTtcRealise,
     definirObjectifVenteMensuel,
     definirPrixVenteMoyenTtc,
     definirTresorerieInitiale,
+    definirCaTtcRealise,
     avancerMoisProjections,
     chargement,
     enregistrement,

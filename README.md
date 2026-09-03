@@ -44,8 +44,8 @@ L'application est alors accessible sur `http://localhost:5173`
 
 ### Pages (dans l'ordre du menu)
 - **Tableau de bord** — CA du mois, commandes du mois, colis fabricables, alertes, achats recommandés, objectif de vente mensuel
-- **Ventes** — saisie d'une vente (client, type, origine, montant HT, type de bateau), historique filtrable, export CSV, graphe de CA mensuel
-- **Expédition** — colis à expédier, finalisation (contenu, transporteur, n° de série), historique filtrable
+- **Ventes** — saisie d'une vente (client, type, origines multiples, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV, total sous le tableau, graphe de CA mensuel
+- **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, n° de série proposé automatiquement), historique filtrable
 - **Stock** — pièces avec seuils, prix unitaire et MOQ ; sous-ensembles disponibles ; accès aux modales *Gérer les sous-ensembles* et *Fabrication*
 - **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection
 - **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant
@@ -100,6 +100,7 @@ l'éditeur SQL de Supabase. Les plus récents sont rejouables sans risque
 - `add-projections.sql` — paramètres de projection et table `projections_lignes`
 - `add-projections-mois.sql` — mois de départ de la fenêtre de projection
 - `add-commandes-groupe.sql` — `groupe_id` pour les commandes multi-références
+- `add-origines-multiples.sql` — plusieurs origines par vente, et CA TTC réalisé
 
 ## 🔐 Configuration
 

@@ -156,6 +156,7 @@ export type Expedition = {
   numero_serie: string | null
   montant_paye: number | null
   origine_vente: OrigineVente | null
+  origines_vente: OrigineVente[] | null
   commentaire_origine: string | null
   type_bateau: string | null
   items: ExpeditionItem[]

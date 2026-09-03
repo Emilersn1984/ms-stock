@@ -96,7 +96,7 @@ function CarteAExpedier({
           {expedition.date_envoi_previsionnelle && (
             <span className="flex items-center gap-1 text-alert-600 font-medium">
               <CalendarClock size={11} />
-              {new Date(expedition.date_envoi_previsionnelle).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+              Envoi prévu le {new Date(expedition.date_envoi_previsionnelle).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
             </span>
           )}
         </div>
@@ -628,7 +628,7 @@ export default function ExpeditionPage() {
           clients={clients}
           sousEnsembles={sousEnsembles}
           pieces={pieces}
-          expeditionsEnvoyees={envoyees}
+          expeditionsExistantes={expeditions}
           utilisateur={utilisateur}
           sousEnsembleBoueeId={sousEnsembleBoueeId}
           onClose={fermerModal}

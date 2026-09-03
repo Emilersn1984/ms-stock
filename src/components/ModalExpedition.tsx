@@ -28,7 +28,7 @@ type Props = {
   clients: Client[]
   sousEnsembles: SousEnsemble[]
   pieces: Piece[]
-  expeditionsEnvoyees: Expedition[]
+  expeditionsExistantes: Expedition[]
   utilisateur: Utilisateur
   // Sous-ensemble considéré comme une « bouée complète » (table parametres).
   sousEnsembleBoueeId: string | null
@@ -41,13 +41,31 @@ function adresseComplete(c: { adresse?: string | null; code_postal?: string | nu
   return [c.adresse, c.code_postal, c.ville].filter((v) => v && v.trim()).join('\n')
 }
 
+/**
+ * Numéro de série proposé par défaut : le plus haut déjà distribué, incrémenté
+ * de 1. On ne lit que la partie numérique finale, pour rester tolérant aux
+ * anciens formats (« 00001 » aussi bien que « SN-26-00007 »).
+ */
+function prochainNumeroSerie(expeditions: Expedition[]): string {
+  let maximum = 0
+  for (const e of expeditions) {
+    if (!e.numero_serie) continue
+    const chiffres = e.numero_serie.match(/(\d+)\s*$/)
+    if (!chiffres) continue
+    const n = parseInt(chiffres[1], 10)
+    if (Number.isFinite(n) && n > maximum) maximum = n
+  }
+  const annee = String(new Date().getFullYear()).slice(-2)
+  return `SN-${annee}-${String(maximum + 1).padStart(5, '0')}`
+}
+
 export default function ModalExpedition({
   mode,
   expedition,
   clients,
   sousEnsembles,
   pieces,
-  expeditionsEnvoyees,
+  expeditionsExistantes,
   utilisateur,
   sousEnsembleBoueeId,
   onClose,
@@ -85,7 +103,12 @@ export default function ModalExpedition({
   const [items, setItems] = useState<ExpeditionItem[]>(expedition?.items ?? [])
   const [rechercheItem, setRechercheItem] = useState('')
 
-  const [numeroSerie, setNumeroSerie] = useState(expedition?.numero_serie ?? '')
+  // À la finalisation, on pré-remplit avec le prochain numéro libre ; il reste
+  // modifiable, et la génération côté base ne sert plus que de filet.
+  const [numeroSerie, setNumeroSerie] = useState(
+    expedition?.numero_serie
+      ?? (mode === 'finaliser' ? prochainNumeroSerie(expeditionsExistantes) : '')
+  )
   const [dateEnvoiPrevisionnelle, setDateEnvoiPrevisionnelle] = useState(
     expedition?.date_envoi_previsionnelle ? expedition.date_envoi_previsionnelle.slice(0, 10) : ''
   )
@@ -135,7 +158,7 @@ export default function ModalExpedition({
         nomDest: undefined as string | undefined,
         prenomDest: undefined as string | undefined,
       }))
-    const parSerie = expeditionsEnvoyees
+    const parSerie = expeditionsExistantes
       .filter((e) => e.numero_serie && e.numero_serie.toLowerCase().includes(q))
       .map((e) => ({
         type: 'serie' as const,
@@ -145,7 +168,7 @@ export default function ModalExpedition({
         prenomDest: e.prenom_destinataire as string | undefined,
       }))
     return [...parClient, ...parSerie].slice(0, 8)
-  }, [rechercheSav, clients, expeditionsEnvoyees])
+  }, [rechercheSav, clients, expeditionsExistantes])
 
   function selectionnerClient(c: Client) {
     setClientIdSelectionne(c.id)
@@ -626,7 +649,7 @@ export default function ModalExpedition({
               onChange={(e) => setAdresse(e.target.value)}
               rows={3}
               placeholder="N° et rue, code postal, ville…"
-              disabled={champVerrouille(adresseComplete(expedition))}
+              
               className={`w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none ${champDesactiveClass}`}
             />
           </div>

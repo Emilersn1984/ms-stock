@@ -232,7 +232,7 @@ function AchatRow({ achat, commandee }: { achat: AchatRecommande; commandee?: bo
           <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-primary-500 tabular-nums flex-wrap">
             <span>Stock: <span className="font-bold text-primary-700">{achat.piece.quantite}</span></span>
             {achat.consommationHebdo > 0 && (
-              <span>Conso: <span className="font-bold">{achat.consommationHebdo}/sem</span></span>
+              <span>Conso: <span className="font-bold">{Math.ceil(achat.consommationHebdo)}/sem</span></span>
             )}
             {achat.piece.delai_appro != null && (
               <span>Délai: <span className="font-bold">{achat.piece.delai_appro} sem</span></span>
@@ -284,7 +284,7 @@ function AExpedierRow({ expedition, onClick }: { expedition: Expedition; onClick
           {expedition.date_envoi_previsionnelle && (
             <span className="flex items-center gap-1 text-alert-600 font-medium">
               <CalendarClock size={11} />
-              {new Date(expedition.date_envoi_previsionnelle).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+              Envoi prévu le {new Date(expedition.date_envoi_previsionnelle).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
             </span>
           )}
         </div>

@@ -69,7 +69,7 @@ function AchatRow({ achat, onCommander }: { achat: AchatRecommande; onCommander:
           <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-primary-500 tabular-nums flex-wrap">
             <span>Stock: <span className="font-bold text-primary-700">{achat.piece.quantite}</span></span>
             {achat.consommationHebdo > 0 && (
-              <span>Conso: <span className="font-bold">{achat.consommationHebdo}/sem</span></span>
+              <span>Conso: <span className="font-bold">{Math.ceil(achat.consommationHebdo)}/sem</span></span>
             )}
             {achat.piece.delai_appro != null && (
               <span>Délai: <span className="font-bold">{achat.piece.delai_appro} sem</span></span>

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { useProjections } from '../hooks/useProjections'
 import { useCommandes } from '../hooks/useCommandes'
+import { useExpeditions } from '../hooks/useExpeditions'
 import { useParametreProduction } from '../hooks/useParametreProduction'
 import { projeterAchatsMatieresPremieres } from '../utils/projectionAchats'
 import GraphiqueLigne from '../components/GraphiqueLigne'
@@ -63,20 +64,26 @@ function CelluleMontant({
   const estAuto = valeur === null && valeurAuto !== null
   const [editing, setEditing] = useState(false)
   const [saisie, setSaisie] = useState('')
+  // Contenu du champ à l'ouverture : sans modification, on n'écrit rien.
+  // Sans ça, ouvrir puis quitter une cellule calculée la figeait en dur.
+  const [saisieInitiale, setSaisieInitiale] = useState('')
 
   function ouvrir() {
-    setSaisie(valeur != null ? String(valeur) : (valeurAuto != null ? String(Math.round(valeurAuto)) : ''))
+    const depart = valeur != null
+      ? String(valeur)
+      : (valeurAuto != null ? String(Math.round(valeurAuto)) : '')
+    setSaisie(depart)
+    setSaisieInitiale(depart)
     setEditing(true)
   }
 
   function valider() {
-    const brut = saisie.trim().replace(',', '.')
-    if (brut === '') onChange(null)
-    else {
-      const n = Number(brut)
-      if (Number.isFinite(n)) onChange(n)
-    }
     setEditing(false)
+    const brut = saisie.trim().replace(',', '.')
+    if (brut === saisieInitiale.trim().replace(',', '.')) return
+    if (brut === '') { onChange(null); return }
+    const n = Number(brut)
+    if (Number.isFinite(n)) onChange(n)
   }
 
   if (editing) {
@@ -105,7 +112,9 @@ function CelluleMontant({
       <button
         type="button"
         onClick={ouvrir}
-        title={estAuto ? 'Valeur calculée — cliquer pour la remplacer' : 'Cliquer pour modifier'}
+        title={estAuto
+          ? 'Valeur calculée — cliquer pour la remplacer'
+          : 'Valeur saisie — vider la case pour revenir au calcul automatique'}
         className={`w-full text-right text-xs tabular-nums px-1.5 py-1 rounded hover:bg-primary-100 transition-colors ${
           estAuto ? 'text-primary-500 italic' : effective === 0 ? 'text-primary-300' : 'text-primary-900'
         }`}
@@ -296,24 +305,37 @@ function TableauSection({
 // ─── Réglage numérique compact ─────────────────────────────────────────────────
 
 function Reglage({
-  label, valeur, suffixe, onChange, decimales = false,
+  label, valeur, suffixe, onChange, decimales = false, effacable = false,
 }: {
   label: string
   valeur: number
   suffixe: string
-  onChange: (v: number) => void
+  // `null` n'est transmis que si `effacable` : la case vidée repasse en calcul.
+  onChange: (v: number | null) => void
   decimales?: boolean
+  effacable?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [saisie, setSaisie] = useState(String(valeur))
+  const [saisieInitiale, setSaisieInitiale] = useState(String(valeur))
 
   useEffect(() => { if (!editing) setSaisie(String(valeur)) }, [valeur, editing])
 
+  function ouvrir() {
+    setSaisie(String(valeur))
+    setSaisieInitiale(String(valeur))
+    setEditing(true)
+  }
+
   function valider() {
+    setEditing(false)
+    // Sans modification, ne rien écrire : ouvrir puis quitter une valeur
+    // calculée ne doit pas la figer.
+    if (saisie.trim() === saisieInitiale.trim()) return
+    if (effacable && saisie.trim() === '') { onChange(null); return }
     const n = decimales ? Number(saisie.replace(',', '.')) : parseInt(saisie, 10)
     if (Number.isFinite(n) && n >= 0) onChange(n)
     else setSaisie(String(valeur))
-    setEditing(false)
   }
 
   return (
@@ -337,7 +359,7 @@ function Reglage({
       ) : (
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          onClick={ouvrir}
           title="Cliquer pour modifier"
           className="flex items-center gap-2 text-3xl font-bold tabular-nums text-success-300 hover:opacity-80 transition-opacity text-left"
         >
@@ -350,25 +372,106 @@ function Reglage({
   )
 }
 
+// ─── Réglage sur fond clair, en en-tête de page ────────────────────────────────
+
+function ReglageClair({
+  label, valeur, suffixe, onChange,
+}: {
+  label: string
+  valeur: number
+  suffixe: string
+  onChange: (v: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saisie, setSaisie] = useState(String(valeur))
+  const [saisieInitiale, setSaisieInitiale] = useState(String(valeur))
+
+  useEffect(() => { if (!editing) setSaisie(String(valeur)) }, [valeur, editing])
+
+  function ouvrir() {
+    setSaisie(String(valeur))
+    setSaisieInitiale(String(valeur))
+    setEditing(true)
+  }
+
+  function valider() {
+    setEditing(false)
+    if (saisie.trim() === saisieInitiale.trim()) return
+    const n = Number(saisie.replace(',', '.'))
+    if (Number.isFinite(n) && n >= 0) onChange(n)
+    else setSaisie(String(valeur))
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600">{label}</span>
+      {editing ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          autoFocus
+          value={saisie}
+          onChange={(e) => setSaisie(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={valider}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') valider()
+            if (e.key === 'Escape') { setSaisie(String(valeur)); setEditing(false) }
+          }}
+          className="w-28 border border-primary-300 rounded-lg px-2 py-1.5 text-sm font-bold tabular-nums text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={ouvrir}
+          title="Cliquer pour modifier"
+          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-white hover:bg-primary-50 transition-colors text-sm font-bold tabular-nums text-primary-900"
+        >
+          {valeur.toLocaleString('fr-FR')} {suffixe}
+          <Pencil size={11} className="text-primary-400" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Projections() {
   const { pieces, chargement: chargementStock } = useStock()
   const { commandesEnCours } = useCommandes()
+  const { expeditions } = useExpeditions()
   const {
     lignes, chargement: chargementLignes,
     definirMontant, renommerLigne, ajouterLigne, supprimerLigne, decalerDunMois,
   } = useProjections()
   const {
     objectifVenteMensuel, prixVenteMoyenTtc, tresorerieInitiale, sousEnsembleBoueeId,
-    projectionsMoisDebut, definirObjectifVenteMensuel, definirPrixVenteMoyenTtc,
-    definirTresorerieInitiale, avancerMoisProjections,
+    projectionsMoisDebut, caTtcRealise, definirObjectifVenteMensuel, definirPrixVenteMoyenTtc,
+    definirTresorerieInitiale, definirCaTtcRealise, avancerMoisProjections,
     chargement: chargementParam,
   } = useParametreProduction()
 
   const [nomenclature, setNomenclature] = useState<NomEntry[]>([])
   const [bascule, setBascule] = useState(false)
   const [confirmerBascule, setConfirmerBascule] = useState(false)
+
+  // Réalisé du mois calendaire en cours, d'après les ventes saisies.
+  const moisEnCours = useMemo(
+    () => new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+    []
+  )
+  const { ventesRealiseesMois, caHtRealiseMois } = useMemo(() => {
+    const n = new Date()
+    const debutMois = new Date(n.getFullYear(), n.getMonth(), 1)
+    const duMois = expeditions.filter((e) => new Date(e.date_commande) >= debutMois)
+    return {
+      // Seules les bouées complètes comptent comme « vente réalisée ».
+      ventesRealiseesMois: duMois.filter((e) => e.categorie === 'vente').length,
+      caHtRealiseMois: duMois.reduce((s, e) => s + (e.montant_paye ?? 0), 0),
+    }
+  }, [expeditions])
+  const caTtcRealiseEffectif = caTtcRealise ?? caHtRealiseMois * 1.2
 
   const debut = useMemo(() => moisDebutDepuis(projectionsMoisDebut), [projectionsMoisDebut])
   const mois = useMemo(() => moisProjetes(debut), [debut])
@@ -461,48 +564,69 @@ export default function Projections() {
             Plan de trésorerie — {mois[0]?.label} à {mois[NB_MOIS - 1]?.label}
           </p>
         </div>
-        <button
-          onClick={() => setConfirmerBascule(true)}
-          disabled={bascule}
-          title="Abandonne le premier mois, décale les deux autres et ouvre un nouveau troisième mois"
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-primary-200 hover:bg-primary-50 disabled:opacity-40 text-primary-900 text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
-        >
-          <CalendarClock size={15} />
-          <span className="hidden sm:inline">{bascule ? 'Décalage…' : 'Passer au mois suivant'}</span>
-        </button>
+        <div className="flex items-end gap-4 flex-shrink-0 flex-wrap justify-end">
+          <ReglageClair
+            label="Prix de vente moyen TTC"
+            valeur={prixVenteMoyenTtc}
+            suffixe="€"
+            onChange={definirPrixVenteMoyenTtc}
+          />
+          <ReglageClair
+            label="Trésorerie de départ"
+            valeur={tresorerieInitiale}
+            suffixe="€"
+            onChange={definirTresorerieInitiale}
+          />
+          <button
+            onClick={() => setConfirmerBascule(true)}
+            disabled={bascule}
+            title="Abandonne le premier mois, décale les deux autres et ouvre un nouveau troisième mois"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-primary-200 hover:bg-primary-50 disabled:opacity-40 text-primary-900 text-sm font-semibold rounded-xl transition-colors"
+          >
+            <CalendarClock size={15} />
+            <span className="hidden sm:inline">{bascule ? 'Décalage…' : 'Passer au mois suivant'}</span>
+          </button>
+        </div>
       </div>
 
       {chargement ? (
         <div className="flex items-center justify-center h-40 text-primary-400 text-sm">Chargement...</div>
       ) : (
         <>
-          {/* Hypothèses */}
+          {/* Objectif, puis réalisé du mois en cours */}
           <div className="grid grid-cols-1 sm:grid-cols-3 bg-primary-900 rounded-2xl overflow-hidden mb-6">
             <div className="px-6 py-5">
               <Reglage
                 label="Objectif de vente"
                 valeur={objectifVenteMensuel}
                 suffixe="/ mois"
-                onChange={definirObjectifVenteMensuel}
+                onChange={(v) => definirObjectifVenteMensuel(v ?? 0)}
               />
+            </div>
+            <div className="px-6 py-5 border-t sm:border-t-0 sm:border-l border-primary-800 flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-200">
+                Ventes réalisées
+              </span>
+              <span className="text-3xl font-bold tabular-nums text-success-300">
+                {ventesRealiseesMois}
+              </span>
+              <span className="text-[10px] text-primary-300 capitalize">
+                {moisEnCours} — bouées complètes
+              </span>
             </div>
             <div className="px-6 py-5 border-t sm:border-t-0 sm:border-l border-primary-800">
               <Reglage
-                label="Prix de vente moyen TTC"
-                valeur={prixVenteMoyenTtc}
+                label="CA TTC réalisé"
+                valeur={Math.round(caTtcRealiseEffectif)}
                 suffixe="€"
-                onChange={definirPrixVenteMoyenTtc}
+                onChange={definirCaTtcRealise}
                 decimales
+                effacable
               />
-            </div>
-            <div className="px-6 py-5 border-t sm:border-t-0 sm:border-l border-primary-800">
-              <Reglage
-                label="Trésorerie de départ"
-                valeur={tresorerieInitiale}
-                suffixe="€"
-                onChange={definirTresorerieInitiale}
-                decimales
-              />
+              <span className="text-[10px] text-primary-300 capitalize block mt-1">
+                {moisEnCours}
+                {caTtcRealise == null ? ' — calculé (HT × 1,2)' : ' — saisi'}
+              </span>
             </div>
           </div>
 

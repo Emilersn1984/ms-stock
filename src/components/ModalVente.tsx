@@ -29,13 +29,18 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
   const clientDropdownRef = useRef<HTMLDivElement>(null)
 
   const [dateCommande, setDateCommande] = useState(versInputDate(vente?.date_commande))
+  const [dateEnvoiPrevisionnelle, setDateEnvoiPrevisionnelle] = useState(
+    vente?.date_envoi_previsionnelle ? vente.date_envoi_previsionnelle.slice(0, 10) : ""
+  )
   const [nom, setNom] = useState(vente?.nom_destinataire ?? '')
   const [prenom, setPrenom] = useState(vente?.prenom_destinataire ?? '')
   const [adresse, setAdresse] = useState(vente?.adresse ?? '')
   const [langue, setLangue] = useState<Langue | ''>(vente?.langue ?? '')
   const [categorie, setCategorie] = useState<CategorieExpedition | ''>(vente?.categorie ?? '')
   const [montantPaye, setMontantPaye] = useState(vente?.montant_paye != null ? String(vente.montant_paye) : '')
-  const [origineVente, setOrigineVente] = useState<OrigineVente | ''>(vente?.origine_vente ?? '')
+  const [originesVente, setOriginesVente] = useState<OrigineVente[]>(
+    vente?.origines_vente ?? (vente?.origine_vente ? [vente.origine_vente] : [])
+  )
   const [commentaireOrigine, setCommentaireOrigine] = useState(vente?.commentaire_origine ?? '')
   const [typeBateau, setTypeBateau] = useState(vente?.type_bateau ?? '')
 
@@ -75,7 +80,7 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
     e.preventDefault()
     if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du client requis'); return }
     if (!categorie) { setErreur('Veuillez choisir un type de commande'); return }
-    if (!origineVente) { setErreur('Veuillez choisir une origine'); return }
+    if (originesVente.length === 0) { setErreur("Veuillez choisir au moins une origine"); return }
 
     const montantValue = montantPaye.trim() ? Number(montantPaye.replace(',', '.')) : null
     if (montantValue !== null && !Number.isFinite(montantValue)) { setErreur('Montant payé invalide'); return }
@@ -119,10 +124,12 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
         adresse: adresse.trim() || null,
         categorie,
         montant_paye: montantValue,
-        origine_vente: origineVente,
+        origines_vente: originesVente,
+        origine_vente: originesVente[0] ?? null,
         commentaire_origine: commentaireOrigine.trim() || null,
         type_bateau: typeBateau.trim() || null,
         date_commande: new Date(dateCommande).toISOString(),
+        date_envoi_previsionnelle: dateEnvoiPrevisionnelle || null,
       }
 
       if (mode === 'creer') {
@@ -249,17 +256,31 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
             </div>
           )}
 
-          {/* Date de commande */}
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Date de commande
-            </label>
-            <input
-              type="date"
-              value={dateCommande}
-              onChange={(e) => setDateCommande(e.target.value)}
-              className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-            />
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Date de commande
+              </label>
+              <input
+                type="date"
+                value={dateCommande}
+                onChange={(e) => setDateCommande(e.target.value)}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Expédition prévue{' '}
+                <span className="text-primary-400 font-normal normal-case tracking-normal">(facultatif)</span>
+              </label>
+              <input
+                type="date"
+                value={dateEnvoiPrevisionnelle}
+                onChange={(e) => setDateEnvoiPrevisionnelle(e.target.value)}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
           </div>
 
           {/* Nom / prénom */}
@@ -342,26 +363,34 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
             </div>
           </div>
 
-          {/* Origine */}
+          {/* Origines — plusieurs choix possibles */}
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-              Origine *
+              Origine *{' '}
+              <span className="text-primary-400 font-normal normal-case tracking-normal">
+                (plusieurs choix possibles)
+              </span>
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {ORIGINES_VENTE.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  onClick={() => setOrigineVente(o)}
-                  className={`py-2 rounded-xl text-xs font-semibold transition-colors border ${
-                    origineVente === o
-                      ? 'bg-primary-900 text-white border-primary-900'
-                      : 'bg-white text-primary-600 border-primary-200 hover:bg-primary-50'
-                  }`}
-                >
-                  {ORIGINE_VENTE_LABEL[o]}
-                </button>
-              ))}
+              {ORIGINES_VENTE.map((o) => {
+                const active = originesVente.includes(o)
+                return (
+                  <button
+                    key={o}
+                    type="button"
+                    onClick={() => setOriginesVente((prev) =>
+                      prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]
+                    )}
+                    className={`py-2 rounded-xl text-xs font-semibold transition-colors border ${
+                      active
+                        ? 'bg-primary-900 text-white border-primary-900'
+                        : 'bg-white text-primary-600 border-primary-200 hover:bg-primary-50'
+                    }`}
+                  >
+                    {ORIGINE_VENTE_LABEL[o]}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
