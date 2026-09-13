@@ -466,7 +466,7 @@ export default function Projections() {
     const debutMois = new Date(n.getFullYear(), n.getMonth(), 1)
     const duMois = expeditions.filter((e) => new Date(e.date_commande) >= debutMois)
     return {
-      // Seules les bouées complètes comptent comme « vente réalisée ».
+      // Seules les commandes de type « Vente » comptent (ni SAV, ni don).
       ventesRealiseesMois: duMois.filter((e) => e.categorie === 'vente').length,
       caHtRealiseMois: duMois.reduce((s, e) => s + (e.montant_paye ?? 0), 0),
     }
@@ -611,7 +611,7 @@ export default function Projections() {
                 {ventesRealiseesMois}
               </span>
               <span className="text-[10px] text-primary-300 capitalize">
-                {moisEnCours} — bouées complètes
+                {moisEnCours} — hors SAV et dons
               </span>
             </div>
             <div className="px-6 py-5 border-t sm:border-t-0 sm:border-l border-primary-800">

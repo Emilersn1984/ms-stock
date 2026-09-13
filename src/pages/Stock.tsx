@@ -1,20 +1,17 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ChevronDown, Search, Plus, Pencil, ArrowUpDown, RotateCcw, Layers, Factory } from 'lucide-react'
+import { ChevronDown, Search, Plus, Pencil, ArrowUpDown, RotateCcw, Layers } from 'lucide-react'
 import PhotoLightbox from '../components/PhotoLightbox'
 import AnimatedList from '../components/AnimatedList'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
-import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
 import { useAnimatedListItem } from '../hooks/useAnimatedListItem'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { getCouleurSeuil, COULEUR_LABEL } from '../utils/couleurSeuil'
 import ModalModifierQuantite from '../components/ModalModifierQuantite'
 import ModalAjouterPiece from '../components/ModalAjouterPiece'
-import ModalModifierSE from '../components/ModalModifierSE'
 import ModalSousEnsembles from '../components/ModalSousEnsembles'
-import CarteSousEnsembles from '../components/CarteSousEnsembles'
-import ModalFabrication from '../components/ModalFabrication'
-import { Piece, SousEnsemble, CouleurSeuil } from '../types'
+import ModalFichePiece from '../components/ModalFichePiece'
+import { Piece, CouleurSeuil } from '../types'
 
 const ACCENT_HEX: Record<CouleurSeuil, string> = {
   rouge: '#E53535', jaune: '#F9BC1A', vert: '#22B84F',
@@ -36,9 +33,10 @@ function SectionLabel({ texte, count, accent }: { texte: string; count?: string;
   )
 }
 
-function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
+function PieceRow({ piece, index, onOuvrir, onModifier, onPhoto, canEdit }: {
   piece: Piece
   index: number
+  onOuvrir: (piece: Piece) => void
   onModifier: (piece: Piece) => void
   onPhoto: (url: string) => void
   canEdit: boolean
@@ -46,7 +44,7 @@ function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
   const { ref, style } = useAnimatedListItem<HTMLTableRowElement>(index)
   const couleur = getCouleurSeuil(piece)
   return (
-    <tr ref={ref} style={style} className="hover:bg-primary-50 transition-colors">
+    <tr ref={ref} style={style} onClick={() => onOuvrir(piece)} className="hover:bg-primary-50 transition-colors cursor-pointer">
       <td className="border-l-4 px-4 py-3.5" style={{ borderLeftColor: ACCENT_HEX[couleur] }}>
         <div className="flex items-center justify-between gap-2.5">
           <div className="min-w-0">
@@ -56,7 +54,7 @@ function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
             )}
           </div>
           {piece.photo_url && (
-            <img src={piece.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(piece.photo_url!)} />
+            <img src={piece.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); onPhoto(piece.photo_url!) }} />
           )}
         </div>
       </td>
@@ -96,7 +94,7 @@ function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
       </td>
       <td className="px-5 py-3.5 text-right">
         {canEdit && (
-          <button onClick={() => onModifier(piece)} className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors">
+          <button onClick={(e) => { e.stopPropagation(); onModifier(piece) }} className="text-sm text-primary-500 hover:text-primary-800 font-medium transition-colors">
             Modifier
           </button>
         )}
@@ -105,9 +103,10 @@ function PieceRow({ piece, index, onModifier, onPhoto, canEdit }: {
   )
 }
 
-function PieceCard({ piece, index, onModifier, onPhoto, canEdit }: {
+function PieceCard({ piece, index, onOuvrir, onModifier, onPhoto, canEdit }: {
   piece: Piece
   index: number
+  onOuvrir: (piece: Piece) => void
   onModifier: (piece: Piece) => void
   onPhoto: (url: string) => void
   canEdit: boolean
@@ -115,7 +114,7 @@ function PieceCard({ piece, index, onModifier, onPhoto, canEdit }: {
   const { ref, style } = useAnimatedListItem<HTMLDivElement>(index)
   const couleur = getCouleurSeuil(piece)
   return (
-    <div ref={ref} style={style} className="flex rounded-xl overflow-hidden border border-primary-100">
+    <div ref={ref} style={style} onClick={() => onOuvrir(piece)} className="flex rounded-xl overflow-hidden border border-primary-100 cursor-pointer">
       <div className="w-[3px] flex-shrink-0" style={{ backgroundColor: ACCENT_HEX[couleur] }} />
       <div className="flex-1 flex items-center gap-3 px-3.5 py-2.5 bg-white min-w-0">
         <div className="flex-1 min-w-0">
@@ -131,7 +130,7 @@ function PieceCard({ piece, index, onModifier, onPhoto, canEdit }: {
           )}
         </div>
         {piece.photo_url && (
-          <img src={piece.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onPhoto(piece.photo_url!)} />
+          <img src={piece.photo_url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); onPhoto(piece.photo_url!) }} />
         )}
         <div className="flex-shrink-0 text-right">
           <div className="flex items-center justify-end gap-1.5">
@@ -145,7 +144,7 @@ function PieceCard({ piece, index, onModifier, onPhoto, canEdit }: {
           <p className={`text-[10px] uppercase tracking-wide font-bold ${STATUS_CLASS[couleur]}`}>{COULEUR_LABEL[couleur]}</p>
         </div>
         {canEdit && (
-          <button onClick={() => onModifier(piece)} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1" title="Modifier la quantité">
+          <button onClick={(e) => { e.stopPropagation(); onModifier(piece) }} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:text-primary-700 hover:bg-primary-50 transition-colors ml-1" title="Modifier la quantité">
             <Pencil size={14} />
           </button>
         )}
@@ -174,7 +173,6 @@ function KpiStrip({ rouge, jaune, vert }: { rouge: number; jaune: number; vert: 
 
 export default function Stock() {
   const { pieces, chargement, erreur } = useStock()
-  const { sousEnsembles: sousEnsemblesTous } = useSousEnsemblesStock()
   const utilisateur = getUtilisateurStored()
 
   const [recherche, setRecherche] = useState('')
@@ -186,10 +184,9 @@ export default function Stock() {
   const [pieceVersSeIds, setPieceVersSeIds] = useState<Record<string, string[]>>({})
   const dropdownSSRef = useRef<HTMLDivElement>(null)
   const [pieceAModifier, setPieceAModifier] = useState<Piece | null>(null)
-  const [seAModifier, setSeAModifier] = useState<SousEnsemble | null>(null)
+  const [pieceOuverte, setPieceOuverte] = useState<Piece | null>(null)
   const [showAjouter, setShowAjouter] = useState(false)
   const [showSousEnsembles, setShowSousEnsembles] = useState(false)
-  const [showFabrication, setShowFabrication] = useState(false)
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null)
   const [triColonne, setTriColonne] = useState<'quantite' | 'delai' | 'statut' | null>(null)
 
@@ -310,13 +307,6 @@ export default function Stock() {
             <Layers size={15} />
             <span className="hidden sm:inline">Gérer les sous-ensembles</span>
           </button>
-          <button
-            onClick={() => setShowFabrication(true)}
-            className="flex items-center gap-2 border border-primary-200 text-primary-700 hover:bg-primary-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-          >
-            <Factory size={15} />
-            <span className="hidden sm:inline">Fabrication</span>
-          </button>
           {utilisateur?.role === 'patron' && (
             <button
               onClick={() => setShowAjouter(true)}
@@ -333,9 +323,6 @@ export default function Stock() {
       {pieces.length > 0 && (
         <KpiStrip rouge={stats.rouge} jaune={stats.jaune} vert={stats.vert} />
       )}
-
-      {/* Sous-ensembles disponibles */}
-      <CarteSousEnsembles sousEnsembles={sousEnsemblesTous} onSelectionner={setSeAModifier} />
 
       {/* Pièces */}
       <SectionLabel
@@ -545,6 +532,7 @@ export default function Stock() {
                       piece={piece}
                       index={i}
                       canEdit={!!utilisateur}
+                      onOuvrir={(p) => setPieceOuverte(p)}
                       onModifier={(p) => setPieceAModifier(p)}
                       onPhoto={(url) => setPhotoLightbox(url)}
                     />
@@ -562,6 +550,7 @@ export default function Stock() {
                 piece={piece}
                 index={i}
                 canEdit={!!utilisateur}
+                onOuvrir={(p) => setPieceOuverte(p)}
                 onModifier={(p) => setPieceAModifier(p)}
                 onPhoto={(url) => setPhotoLightbox(url)}
               />
@@ -582,11 +571,15 @@ export default function Stock() {
         />
       )}
 
-      {seAModifier && utilisateur && (
-        <ModalModifierSE
-          se={seAModifier}
-          utilisateur={utilisateur}
-          onClose={() => setSeAModifier(null)}
+      {pieceOuverte && (
+        <ModalFichePiece
+          // La fiche suit les mises à jour temps réel de la pièce.
+          piece={pieces.find((p) => p.id === pieceOuverte.id) ?? pieceOuverte}
+          nomsSousEnsembles={Object.fromEntries(sousEnsemblesListe.map((se) => [se.id, se.nom]))}
+          canEdit={!!utilisateur}
+          onModifier={() => { setPieceAModifier(pieceOuverte); setPieceOuverte(null) }}
+          onPhoto={(url) => setPhotoLightbox(url)}
+          onClose={() => setPieceOuverte(null)}
         />
       )}
 
@@ -599,10 +592,6 @@ export default function Stock() {
           onClose={() => setShowAjouter(false)}
           onSuccess={() => {}}
         />
-      )}
-
-      {showFabrication && (
-        <ModalFabrication pieces={pieces} onClose={() => setShowFabrication(false)} />
       )}
 
       {showSousEnsembles && (

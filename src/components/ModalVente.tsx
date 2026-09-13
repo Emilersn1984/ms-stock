@@ -4,12 +4,15 @@ import { supabase } from '../lib/supabase'
 import { LANGUES } from '../utils/langues'
 import { CATEGORIES_VENTE, CATEGORIE_LABEL } from '../utils/categoriesExpedition'
 import { ORIGINES_VENTE, ORIGINE_VENTE_LABEL } from '../utils/originesVente'
-import { Client, Expedition, CategorieExpedition, OrigineVente, Langue, Utilisateur } from '../types'
+import { Client, Expedition, ExpeditionItem, CategorieExpedition, OrigineVente, Langue, SousEnsemble, Utilisateur } from '../types'
+import SelecteurProduits from './SelecteurProduits'
+import { ajusterContenu } from '../utils/consommerExpedition'
 
 type Props = {
   mode: 'creer' | 'modifier'
   vente?: Expedition | null
   clients: Client[]
+  sousEnsembles: SousEnsemble[]
   utilisateur: Utilisateur
   onClose: () => void
   onSaved: () => void
@@ -21,7 +24,7 @@ function versInputDate(iso: string | null | undefined): string {
   return new Date(iso).toISOString().slice(0, 10)
 }
 
-export default function ModalVente({ mode, vente, clients, utilisateur, onClose, onSaved }: Props) {
+export default function ModalVente({ mode, vente, clients, sousEnsembles, utilisateur, onClose, onSaved }: Props) {
   const [modeSaisieClient, setModeSaisieClient] = useState<'recherche' | 'manuel'>('recherche')
   const [clientIdSelectionne, setClientIdSelectionne] = useState<string | null>(vente?.client_id ?? null)
   const [rechercheClient, setRechercheClient] = useState('')
@@ -43,6 +46,8 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
   )
   const [commentaireOrigine, setCommentaireOrigine] = useState(vente?.commentaire_origine ?? '')
   const [typeBateau, setTypeBateau] = useState(vente?.type_bateau ?? '')
+  const [factureEmise, setFactureEmise] = useState<boolean | null>(vente?.facture_emise ?? null)
+  const [items, setItems] = useState<ExpeditionItem[]>(vente?.items ?? [])
 
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -81,6 +86,7 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
     if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du client requis'); return }
     if (!categorie) { setErreur('Veuillez choisir un type de commande'); return }
     if (originesVente.length === 0) { setErreur("Veuillez choisir au moins une origine"); return }
+    if (mode === 'creer' && factureEmise === null) { setErreur('Veuillez indiquer si la facture a été émise'); return }
 
     const montantValue = montantPaye.trim() ? Number(montantPaye.replace(',', '.')) : null
     if (montantValue !== null && !Number.isFinite(montantValue)) { setErreur('Montant payé invalide'); return }
@@ -128,6 +134,8 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
         origine_vente: originesVente[0] ?? null,
         commentaire_origine: commentaireOrigine.trim() || null,
         type_bateau: typeBateau.trim() || null,
+        facture_emise: factureEmise,
+        items,
         date_commande: new Date(dateCommande).toISOString(),
         date_envoi_previsionnelle: dateEnvoiPrevisionnelle || null,
       }
@@ -137,11 +145,14 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
           ...champs,
           statut: 'a_expedier',
           origine: 'manuel',
-          items: [],
           utilisateur_id: utilisateur.id,
         })
         if (error) throw error
       } else if (vente) {
+        // Expédition déjà partie : le stock a été décompté sur l'ancien contenu.
+        if (vente.statut !== 'a_expedier') {
+          await ajusterContenu(vente.items ?? [], items, utilisateur.id, `Modification vente — ${prenom.trim()} ${nom.trim()}`)
+        }
         const { error } = await supabase
           .from('expeditions')
           .update(champs)
@@ -358,6 +369,40 @@ export default function ModalVente({ mode, vente, clients, utilisateur, onClose,
                   }`}
                 >
                   {CATEGORIE_LABEL[c]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Produits sortis de l'atelier */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Contenu{' '}
+              <span className="text-primary-400 font-normal normal-case tracking-normal">
+                (plusieurs choix possibles — décompté du stock à l'expédition)
+              </span>
+            </label>
+            <SelecteurProduits sousEnsembles={sousEnsembles} items={items} onChange={setItems} />
+          </div>
+
+          {/* Facture émise */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Facture émise{mode === 'creer' ? ' *' : ''}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {([true, false] as const).map((valeur) => (
+                <button
+                  key={String(valeur)}
+                  type="button"
+                  onClick={() => setFactureEmise(valeur)}
+                  className={`py-2 rounded-xl text-xs font-semibold transition-colors border ${
+                    factureEmise === valeur
+                      ? 'bg-primary-900 text-white border-primary-900'
+                      : 'bg-white text-primary-600 border-primary-200 hover:bg-primary-50'
+                  }`}
+                >
+                  {valeur ? 'Oui' : 'Non'}
                 </button>
               ))}
             </div>

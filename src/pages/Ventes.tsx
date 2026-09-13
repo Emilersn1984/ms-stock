@@ -3,6 +3,8 @@ import { Plus, Search, Download, Pencil, Trash2, ShoppingBag } from 'lucide-reac
 import { supabase } from '../lib/supabase'
 import { useExpeditions } from '../hooks/useExpeditions'
 import { useClients } from '../hooks/useClients'
+import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
+import { resumeContenu } from '../utils/produitsAtelier'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { drapeauLangue, labelLangue, LANGUES } from '../utils/langues'
@@ -31,6 +33,7 @@ function champCsv(valeur: string): string {
 export default function Ventes() {
   const { expeditions, chargement, recharger } = useExpeditions()
   const { clients, recharger: rechargerClients } = useClients()
+  const { sousEnsembles } = useSousEnsemblesStock()
   const utilisateur = getUtilisateurStored()
 
   const [modalOuvert, setModalOuvert] = useState<'creer' | 'modifier' | null>(null)
@@ -42,16 +45,18 @@ export default function Ventes() {
   const [filtreLangue, setFiltreLangue] = useState<Langue | ''>('')
   const [filtreCategorie, setFiltreCategorie] = useState<CategorieExpedition | ''>('')
   const [filtreOrigine, setFiltreOrigine] = useState<OrigineVente | ''>('')
+  const [filtreFacture, setFiltreFacture] = useState<'' | 'oui' | 'non' | 'nr'>('')
   const [filtreDateDebut, setFiltreDateDebut] = useState('')
   const [filtreDateFin, setFiltreDateFin] = useState('')
 
-  const hasFiltresActifs = !!(filtreClient || filtreLangue || filtreCategorie || filtreOrigine || filtreDateDebut || filtreDateFin)
+  const hasFiltresActifs = !!(filtreClient || filtreLangue || filtreCategorie || filtreOrigine || filtreFacture || filtreDateDebut || filtreDateFin)
 
   function resetFiltres() {
     setFiltreClient('')
     setFiltreLangue('')
     setFiltreCategorie('')
     setFiltreOrigine('')
+    setFiltreFacture('')
     setFiltreDateDebut('')
     setFiltreDateFin('')
   }
@@ -72,6 +77,9 @@ export default function Ventes() {
       if (filtreLangue && v.langue !== filtreLangue) return false
       if (filtreCategorie && v.categorie !== filtreCategorie) return false
       if (filtreOrigine && !originesDeLaVente(v).includes(filtreOrigine)) return false
+      if (filtreFacture === 'oui' && v.facture_emise !== true) return false
+      if (filtreFacture === 'non' && v.facture_emise !== false) return false
+      if (filtreFacture === 'nr' && v.facture_emise != null) return false
       if (filtreDateDebut && new Date(v.date_commande) < new Date(filtreDateDebut)) return false
       if (filtreDateFin) {
         // Borne haute inclusive : on compare à la fin de la journée choisie.
@@ -81,7 +89,7 @@ export default function Ventes() {
       }
       return true
     })
-  }, [ventes, filtreClient, filtreLangue, filtreCategorie, filtreOrigine, filtreDateDebut, filtreDateFin])
+  }, [ventes, filtreClient, filtreLangue, filtreCategorie, filtreOrigine, filtreFacture, filtreDateDebut, filtreDateFin])
 
   const totalFiltre = useMemo(
     () => ventesFiltrees.reduce((somme, v) => somme + (v.montant_paye ?? 0), 0),
@@ -91,7 +99,7 @@ export default function Ventes() {
   function exporterCsv() {
     const entetes = [
       'Date de commande', 'Prénom', 'Nom', 'Adresse', 'Langue', 'Type de commande',
-      'Origine', 'Commentaire origine', 'Type de bateau', 'Montant payé HT (€)',
+      'Contenu', 'Facture émise', 'Origine', 'Commentaire origine', 'Type de bateau', 'Montant payé HT (€)',
     ]
     const lignes = ventesFiltrees.map((v) => [
       formatDate(v.date_commande),
@@ -100,6 +108,8 @@ export default function Ventes() {
       v.adresse ?? '',
       v.langue ? labelLangue(v.langue) : '',
       v.categorie ? CATEGORIE_LABEL[v.categorie] : '',
+      resumeContenu(v.items, sousEnsembles),
+      v.facture_emise == null ? '' : v.facture_emise ? 'Oui' : 'Non',
       originesDeLaVente(v).map((o) => ORIGINE_VENTE_LABEL[o]).join(" + "),
       v.commentaire_origine ?? '',
       v.type_bateau ?? '',
@@ -193,7 +203,7 @@ export default function Ventes() {
           </div>
 
           {/* Filtres */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 Client
@@ -260,6 +270,22 @@ export default function Ventes() {
 
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Facture émise
+              </label>
+              <select
+                value={filtreFacture}
+                onChange={(e) => setFiltreFacture(e.target.value as '' | 'oui' | 'non' | 'nr')}
+                className="w-full border border-primary-200 rounded-xl px-3 py-2 text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+              >
+                <option value="">Toutes</option>
+                <option value="oui">Oui</option>
+                <option value="non">Non</option>
+                <option value="nr">Non renseigné</option>
+              </select>
+            </div>
+
+            <div className="xl:col-span-2">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
                 Date de commande
               </label>
               <div className="flex items-center gap-2">
@@ -308,11 +334,10 @@ export default function Ventes() {
                     <tr>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3 whitespace-nowrap">Date de commande</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Nom &amp; Prénom</th>
-                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Adresse</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Langue</th>
                       <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Type</th>
-                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Origine</th>
-                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3 whitespace-nowrap">Type de bateau</th>
+                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Contenu</th>
+                      <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3">Facture</th>
                       <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-3 py-3 whitespace-nowrap">Montant payé HT</th>
                       <th className="px-3 py-3" />
                     </tr>
@@ -323,12 +348,9 @@ export default function Ventes() {
                         <td className="px-3 py-3 text-xs text-primary-500 whitespace-nowrap">
                           {formatDate(v.date_commande)}
                         </td>
-                        <td className="px-3 py-3 font-medium text-primary-900 whitespace-nowrap">
-                          {v.prenom_destinataire} {v.nom_destinataire}
-                        </td>
-                        <td className="px-3 py-3 text-xs text-primary-600">
-                          <div className="max-w-[130px] truncate" title={v.adresse ?? ''}>
-                            {v.adresse ?? '—'}
+                        <td className="px-3 py-3 font-medium text-primary-900">
+                          <div className="max-w-[200px] truncate" title={`${v.prenom_destinataire} ${v.nom_destinataire}`}>
+                            {v.prenom_destinataire} {v.nom_destinataire}
                           </div>
                         </td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap" title={v.langue ? labelLangue(v.langue) : ''}>
@@ -343,27 +365,19 @@ export default function Ventes() {
                             <span className="text-primary-400 text-xs">—</span>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-xs whitespace-nowrap">
-                          {originesDeLaVente(v).length > 0 ? (
-                            <span className="text-primary-700 font-medium">
-                              {originesDeLaVente(v).map((o) => ORIGINE_VENTE_LABEL[o]).join(' + ')}
-                            </span>
-                          ) : (
-                            <span className="text-primary-400">—</span>
-                          )}
-                          {v.commentaire_origine && (
-                            <span
-                              className="block text-primary-400 font-normal max-w-[120px] truncate"
-                              title={v.commentaire_origine}
-                            >
-                              {v.commentaire_origine}
-                            </span>
-                          )}
-                        </td>
                         <td className="px-3 py-3 text-xs text-primary-600">
-                          <div className="max-w-[110px] truncate" title={v.type_bateau ?? ''}>
-                            {v.type_bateau ?? '—'}
+                          <div className="max-w-[140px] truncate" title={resumeContenu(v.items, sousEnsembles)}>
+                            {resumeContenu(v.items, sousEnsembles) || '—'}
                           </div>
+                        </td>
+                        <td className="px-3 py-3 text-xs whitespace-nowrap">
+                          {v.facture_emise == null ? (
+                            <span className="text-primary-400">—</span>
+                          ) : v.facture_emise ? (
+                            <span className="font-semibold text-success-600">Oui</span>
+                          ) : (
+                            <span className="font-semibold text-warning-600">Non</span>
+                          )}
                         </td>
                         <td className="px-3 py-3 text-right text-sm font-bold text-primary-700 tabular-nums whitespace-nowrap">
                           {formatMontant(v.montant_paye)}
@@ -414,6 +428,7 @@ export default function Ventes() {
           mode={modalOuvert}
           vente={venteEnEdition}
           clients={clients}
+          sousEnsembles={sousEnsembles}
           utilisateur={utilisateur}
           onClose={() => { setModalOuvert(null); setVenteEnEdition(null) }}
           onSaved={apresEnregistrement}

@@ -1,10 +1,8 @@
 import { useState, useMemo } from 'react'
 import { Truck, ShoppingBag, Search, PackageCheck, Pencil, Trash2, CheckCircle2, Undo2, CalendarClock, Users } from 'lucide-react'
 import { useSousEnsemblesStock } from '../hooks/useSousEnsemblesStock'
-import { useStock } from '../hooks/useStock'
 import { useClients } from '../hooks/useClients'
 import { useExpeditions } from '../hooks/useExpeditions'
-import { useParametreProduction } from '../hooks/useParametreProduction'
 import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { drapeauLangue } from '../utils/langues'
 import { CATEGORIE_LABEL, CATEGORIE_BADGE, CATEGORIES_TOUTES } from '../utils/categoriesExpedition'
@@ -13,7 +11,7 @@ import { supabase } from '../lib/supabase'
 import ModalExpedition from '../components/ModalExpedition'
 import ModalClients from '../components/ModalClients'
 import ConfirmDialog from '../components/ConfirmDialog'
-import { creerOperation } from '../utils/creerOperation'
+import { retournerContenu } from '../utils/consommerExpedition'
 import { Expedition, CategorieExpedition, Transporteur, Langue } from '../types'
 
 function SectionLabel({ texte, accent, count }: { texte: string; accent?: string; count?: number | string }) {
@@ -111,12 +109,14 @@ function CarteEnvoyee({
   onSupprimer,
   onReceptionner,
   onRenvoyer,
+  onAnnulerReception,
 }: {
   expedition: Expedition
   onModifier?: () => void
   onSupprimer?: () => void
   onReceptionner?: () => void
   onRenvoyer?: () => void
+  onAnnulerReception?: () => void
 }) {
   const nomComplet = `${expedition.prenom_destinataire} ${expedition.nom_destinataire}`.trim() || '—'
   const urlSuivi = buildTrackingUrl(expedition.transporteur, expedition.numero_suivi)
@@ -130,6 +130,9 @@ function CarteEnvoyee({
             <CategorieBadge categorie={expedition.categorie} />
             {onRenvoyer && expedition.statut === 'envoye' && (
               <ActionIcon icon={<Undo2 size={12} />} title="Renvoyer vers à expédier" onClick={onRenvoyer} />
+            )}
+            {onAnnulerReception && expedition.statut === 'receptionne' && (
+              <ActionIcon icon={<Undo2 size={12} />} title="Annuler la réception (revient dans « Envoyé »)" onClick={onAnnulerReception} />
             )}
             {onModifier && <ActionIcon icon={<Pencil size={12} />} title="Modifier" onClick={onModifier} />}
             {onSupprimer && <ActionIcon icon={<Trash2 size={12} />} title="Supprimer" onClick={onSupprimer} className="hover:!bg-danger-100 hover:!text-danger-600" />}
@@ -180,10 +183,8 @@ function CarteEnvoyee({
 
 export default function ExpeditionPage() {
   const { sousEnsembles, chargement: chargementSe } = useSousEnsemblesStock()
-  const { pieces, chargement: chargementPieces } = useStock()
   const { clients, chargement: chargementClients, recharger: rechargerClients } = useClients()
   const { aExpedier, envoyees, historique, expeditions, chargement: chargementExp, recharger: rechargerExpeditions } = useExpeditions()
-  const { sousEnsembleBoueeId } = useParametreProduction()
   const utilisateur = getUtilisateurStored()
 
   const [modalOuvert, setModalOuvert] = useState<'creer' | 'finaliser' | 'modifier' | null>(null)
@@ -241,41 +242,19 @@ export default function ExpeditionPage() {
     recharger()
   }
 
+  // « Marquer reçu » cliqué par erreur : l'expédition redevient simplement
+  // envoyée. Le stock n'est pas concerné, il a été décompté à l'envoi.
+  async function annulerReception(e: Expedition) {
+    await supabase
+      .from('expeditions')
+      .update({ statut: 'envoye', date_reception: null })
+      .eq('id', e.id)
+    recharger()
+  }
+
   async function renvoyerVersAExpedier(e: Expedition) {
     if (!utilisateur) return
-    for (const item of e.items ?? []) {
-      if (item.sous_ensemble_id) {
-        const se = sousEnsembles.find((s) => s.id === item.sous_ensemble_id)
-        if (!se) continue
-        const nouvelleQuantite = se.quantite + item.quantite
-        const { error } = await supabase.from('sous_ensembles').update({ quantite: nouvelleQuantite }).eq('id', se.id)
-        if (error) throw error
-        await creerOperation({
-          type: 'expedition',
-          sous_ensemble_id: se.id,
-          quantite_avant: se.quantite,
-          quantite_apres: nouvelleQuantite,
-          delta: item.quantite,
-          utilisateur_id: utilisateur.id,
-          commentaire: `Retour en attente d'expédition — ${e.prenom_destinataire} ${e.nom_destinataire}`,
-        })
-      } else if (item.piece_id) {
-        const piece = pieces.find((p) => p.id === item.piece_id)
-        if (!piece) continue
-        const nouvelleQuantite = piece.quantite + item.quantite
-        const { error } = await supabase.from('pieces').update({ quantite: nouvelleQuantite }).eq('id', piece.id)
-        if (error) throw error
-        await creerOperation({
-          type: 'expedition',
-          piece_id: piece.id,
-          quantite_avant: piece.quantite,
-          quantite_apres: nouvelleQuantite,
-          delta: item.quantite,
-          utilisateur_id: utilisateur.id,
-          commentaire: `Retour en attente d'expédition — ${e.prenom_destinataire} ${e.nom_destinataire}`,
-        })
-      }
-    }
+    await retournerContenu(e.items ?? [], utilisateur.id, `Retour en attente d'expédition — ${e.prenom_destinataire} ${e.nom_destinataire}`)
     await supabase
       .from('expeditions')
       .update({ statut: 'a_expedier', date_expedition: null })
@@ -322,7 +301,7 @@ export default function ExpeditionPage() {
     setFiltreDateFin('')
   }
 
-  const chargement = chargementSe || chargementPieces || chargementClients || chargementExp
+  const chargement = chargementSe || chargementClients || chargementExp
 
   if (!utilisateur) {
     return (
@@ -589,7 +568,12 @@ export default function ExpeditionPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end">
+                          <div className="flex justify-end gap-1">
+                            <ActionIcon
+                              icon={<Undo2 size={12} />}
+                              title="Annuler la réception (revient dans « Envoyé »)"
+                              onClick={() => annulerReception(e)}
+                            />
                             <ActionIcon
                               icon={<Trash2 size={12} />}
                               title="Supprimer"
@@ -615,6 +599,7 @@ export default function ExpeditionPage() {
                 onModifier={() => ouvrirModification(e)}
                 onSupprimer={() => setExpeditionASupprimer(e)}
                 onReceptionner={e.statut === 'envoye' ? () => marquerReceptionnee(e) : undefined}
+                onAnnulerReception={() => annulerReception(e)}
               />
             ))}
           </div>
@@ -627,10 +612,8 @@ export default function ExpeditionPage() {
           expedition={expeditionEnEdition}
           clients={clients}
           sousEnsembles={sousEnsembles}
-          pieces={pieces}
           expeditionsExistantes={expeditions}
           utilisateur={utilisateur}
-          sousEnsembleBoueeId={sousEnsembleBoueeId}
           onClose={fermerModal}
           onSaved={recharger}
         />

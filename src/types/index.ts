@@ -18,6 +18,8 @@ export type Piece = {
   categorie: string | null
   description: string | null
   commentaire: string | null
+  reference: string | null
+  fournisseur: string | null
   archivee: boolean
   photo_url: string | null
   delai_appro: number | null
@@ -42,8 +44,12 @@ export type SousEnsemble = {
   description: string | null
   quantite: number
   photo_url: string | null
+  produit: ProduitAtelier | null
   created_at: string
 }
+
+// Sous-ensembles qui peuvent sortir de l'atelier lors d'une vente, d'un don ou d'un SAV.
+export type ProduitAtelier = 'bouee_complete' | 'bouee_mecanique' | 'boitier_bord' | 'tourelle'
 
 export type Nomenclature = {
   id: string
@@ -159,6 +165,7 @@ export type Expedition = {
   origines_vente: OrigineVente[] | null
   commentaire_origine: string | null
   type_bateau: string | null
+  facture_emise: boolean | null
   items: ExpeditionItem[]
   date_commande: string
   date_envoi_previsionnelle: string | null

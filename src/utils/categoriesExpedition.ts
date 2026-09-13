@@ -1,7 +1,7 @@
 import { CategorieExpedition } from '../types'
 
 export const CATEGORIE_LABEL: Record<CategorieExpedition, string> = {
-  vente: 'Bouée complète',
+  vente: 'Vente',
   sav: 'SAV',
   don: 'Don',
   demo: 'Démo',

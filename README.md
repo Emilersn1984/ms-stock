@@ -44,15 +44,24 @@ L'application est alors accessible sur `http://localhost:5173`
 
 ### Pages (dans l'ordre du menu)
 - **Tableau de bord** — CA du mois, commandes du mois, colis fabricables, alertes, achats recommandés, objectif de vente mensuel
-- **Ventes** — saisie d'une vente (client, type, origines multiples, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV, total sous le tableau, graphe de CA mensuel
-- **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, n° de série proposé automatiquement), historique filtrable
-- **Stock** — pièces avec seuils, prix unitaire et MOQ ; sous-ensembles disponibles ; accès aux modales *Gérer les sous-ensembles* et *Fabrication*
+- **Ventes** — saisie d'une vente (client, type Vente / SAV / Don, contenu, facture émise, origines multiples, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
+- **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, n° de série proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable
+- **Stock** — pièces avec seuils, prix unitaire et MOQ ; fiche détaillée au clic (référence, fournisseur, sous-ensembles qui l'utilisent) ; modale *Gérer les sous-ensembles*
 - **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection
 - **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant
 - **Historique** — une ligne par vente ou par achat, avec montants perçus et dépensés
 
-### Anciennes pages devenues des modales
-Les pages *Nomenclature* et *Fabrication* ont été supprimées ; leurs fonctions sont accessibles
+### Décompte du stock
+Les sous-ensembles ne sont ni fabriqués ni stockés. Une vente, un don ou un SAV indique quels
+produits sortent de l'atelier : Bouée complète, Bouée mécanique, Boîtier bord, Tourelle (plusieurs
+possibles, avec quantité). À la **validation de l'expédition** (À expédier → Envoyé), la nomenclature
+de chaque produit est explosée récursivement et les composants unitaires sont décomptés
+(`src/utils/consommerExpedition.ts`). Renvoyer l'expédition vers « à expédier » les remet en stock ;
+modifier le contenu d'une expédition déjà envoyée ne répercute que la différence. Marquer reçu
+ou annuler la réception ne touche pas au stock.
+
+### Anciennes pages supprimées
+Les pages *Nomenclature* et *Fabrication* ont été supprimées ; la nomenclature se gère
 depuis la page Stock. Les routes `/nomenclature` et `/fabrication` redirigent vers `/stock`.
 `/livraisons` redirige vers `/commandes` (libellé « Achats MP »).
 
@@ -75,14 +84,14 @@ Base gérée via Supabase. Tables :
 
 | Table | Rôle |
 |---|---|
-| `pieces` | Pièces et composants, avec quantité, seuils, délai d'appro, prix unitaire, MOQ |
-| `sous_ensembles` | Sous-ensembles assemblés |
+| `pieces` | Pièces et composants, avec quantité, seuils, délai d'appro, prix unitaire, MOQ, référence, fournisseur |
+| `sous_ensembles` | Sous-ensembles ; la colonne `produit` désigne les 4 produits vendables |
 | `nomenclature` | Composition des sous-ensembles (pièces et sous-ensembles enfants) |
 | `operations` | Journal des mouvements de stock |
-| `productions` | Historique des fabrications |
+| `productions` | Historique des fabrications (plus alimentée) |
 | `utilisateurs` | Membres de l'équipe et rôles |
 | `clients` | Fiches clients |
-| `expeditions` | Ventes et expéditions (même enregistrement) |
+| `expeditions` | Ventes et expéditions (même enregistrement) ; `items` = produits sortis, `facture_emise` |
 | `commandes` | Achats de matières premières |
 | `alertes_manuelles` | Alertes créées depuis le tableau de bord |
 | `parametres` | Table singleton : objectif de vente, prix de vente moyen, trésorerie initiale, sous-ensemble « bouée complète », mois de départ des projections |
@@ -101,6 +110,7 @@ l'éditeur SQL de Supabase. Les plus récents sont rejouables sans risque
 - `add-projections-mois.sql` — mois de départ de la fenêtre de projection
 - `add-commandes-groupe.sql` — `groupe_id` pour les commandes multi-références
 - `add-origines-multiples.sql` — plusieurs origines par vente, et CA TTC réalisé
+- `add-produits-facture-fournisseur.sql` — référence et fournisseur des pièces, facture émise, produits vendables sur les sous-ensembles
 
 ## 🔐 Configuration
 

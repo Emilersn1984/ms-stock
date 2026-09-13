@@ -18,6 +18,8 @@ type FormData = {
   seuil_jaune: string
   seuil_vert: string
   categorie: string
+  reference: string
+  fournisseur: string
   delai_appro: string
   prix_unitaire: string
   moq: string
@@ -32,6 +34,8 @@ const FORM_INIT: FormData = {
   seuil_jaune: '5',
   seuil_vert: '10',
   categorie: '',
+  reference: '',
+  fournisseur: '',
   delai_appro: '',
   prix_unitaire: '',
   moq: '',
@@ -80,6 +84,8 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
           seuil_jaune: parseInt(form.seuil_jaune, 10) || 0,
           seuil_vert: parseInt(form.seuil_vert, 10) || 0,
           categorie: form.categorie.trim() || null,
+          reference: form.reference.trim() || null,
+          fournisseur: form.fournisseur.trim() || null,
           archivee: false,
           delai_appro: form.est_impression_3d ? null : (form.delai_appro.trim() ? parseInt(form.delai_appro, 10) || null : null),
           prix_unitaire: form.prix_unitaire.trim() ? Number(form.prix_unitaire.replace(',', '.')) || null : null,
@@ -218,6 +224,34 @@ export default function ModalAjouterPiece({ utilisateur, categoriesExistantes, o
                 ))}
               </datalist>
             )}
+          </div>
+
+          {/* Référence + fournisseur */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Référence
+              </label>
+              <input
+                type="text"
+                value={form.reference}
+                onChange={(e) => setField('reference', e.target.value)}
+                placeholder="Réf. fabricant ou fournisseur"
+                className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 text-sm placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                Fournisseur
+              </label>
+              <input
+                type="text"
+                value={form.fournisseur}
+                onChange={(e) => setField('fournisseur', e.target.value)}
+                placeholder="Ex : JLCPCB, Würth…"
+                className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 text-sm placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              />
+            </div>
           </div>
 
           {/* Quantité initiale */}

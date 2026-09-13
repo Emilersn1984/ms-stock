@@ -1,12 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { PackagePlus, Send, Search, X, Minus, Plus as PlusIcon, Pencil, UserSearch, UserPlus2 } from 'lucide-react'
+import { PackagePlus, Send, Search, X, Pencil, UserSearch, UserPlus2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   Client,
   Expedition,
   ExpeditionItem,
   SousEnsemble,
-  Piece,
   Transporteur,
   CategorieExpedition,
   Langue,
@@ -15,8 +14,9 @@ import {
 import { TRANSPORTEURS } from '../utils/trackingUrl'
 import { LANGUES } from '../utils/langues'
 import { drapeauPays } from '../utils/pays'
-import { creerOperation } from '../utils/creerOperation'
-import { consommerSousEnsembleExpedie } from '../utils/consommerExpedition'
+import { sortirContenu, ajusterContenu } from '../utils/consommerExpedition'
+import { PRODUIT_ATELIER_LABEL, sousEnsemblesParProduit } from '../utils/produitsAtelier'
+import SelecteurProduits from './SelecteurProduits'
 import { CATEGORIE_LABEL, CATEGORIE_BADGE, CATEGORIES_TOUTES } from '../utils/categoriesExpedition'
 
 
@@ -27,11 +27,8 @@ type Props = {
   expedition: Expedition | null
   clients: Client[]
   sousEnsembles: SousEnsemble[]
-  pieces: Piece[]
   expeditionsExistantes: Expedition[]
   utilisateur: Utilisateur
-  // Sous-ensemble considéré comme une « bouée complète » (table parametres).
-  sousEnsembleBoueeId: string | null
   onClose: () => void
   onSaved: () => void
 }
@@ -64,10 +61,8 @@ export default function ModalExpedition({
   expedition,
   clients,
   sousEnsembles,
-  pieces,
   expeditionsExistantes,
   utilisateur,
-  sousEnsembleBoueeId,
   onClose,
   onSaved,
 }: Props) {
@@ -100,8 +95,16 @@ export default function ModalExpedition({
   const [dropdownSavOuvert, setDropdownSavOuvert] = useState(false)
   const savDropdownRef = useRef<HTMLDivElement>(null)
 
-  const [items, setItems] = useState<ExpeditionItem[]>(expedition?.items ?? [])
-  const [rechercheItem, setRechercheItem] = useState('')
+  // Produits sortis de l'atelier. Une vente saisie avant l'apparition de ce
+  // choix arrive sans contenu : on propose une bouée complète par défaut.
+  const [items, setItems] = useState<ExpeditionItem[]>(() => {
+    if (expedition?.items?.length) return expedition.items
+    const bouee = sousEnsemblesParProduit(sousEnsembles).get('bouee_complete')
+    if (mode === 'finaliser' && expedition?.categorie === 'vente' && bouee) {
+      return [{ sous_ensemble_id: bouee.id, piece_id: null, nom: PRODUIT_ATELIER_LABEL.bouee_complete, quantite: 1 }]
+    }
+    return []
+  })
 
   // À la finalisation, on pré-remplit avec le prochain numéro libre ; il reste
   // modifiable, et la génération côté base ne sert plus que de filet.
@@ -195,94 +198,13 @@ export default function ModalExpedition({
     setDropdownSavOuvert(false)
   }
 
-  // Un sous-ensemble/pièce déjà réservé dans cette expédition reste affiché même si son
-  // stock disponible est retombé à 0, afin de pouvoir le réduire ou le retirer.
-  const sousEnsemblesDisponibles = useMemo(() => {
-    const idsReserves = new Set(items.filter((i) => i.sous_ensemble_id).map((i) => i.sous_ensemble_id as string))
-    return sousEnsembles.filter((se) => se.quantite > 0 || idsReserves.has(se.id))
-  }, [sousEnsembles, items])
-
-  const piecesDisponibles = useMemo(() => {
-    const idsReserves = new Set(items.filter((i) => i.piece_id).map((i) => i.piece_id as string))
-    return pieces.filter((p) => p.quantite > 0 || idsReserves.has(p.id))
-  }, [pieces, items])
-
-  const sousEnsemblesFiltres = useMemo(() => {
-    if (!rechercheItem.trim()) return sousEnsemblesDisponibles
-    const q = rechercheItem.toLowerCase()
-    return sousEnsemblesDisponibles.filter((se) => se.nom.toLowerCase().includes(q))
-  }, [sousEnsemblesDisponibles, rechercheItem])
-
-  const piecesFiltrees = useMemo(() => {
-    if (!rechercheItem.trim()) return piecesDisponibles
-    const q = rechercheItem.toLowerCase()
-    return piecesDisponibles.filter((p) => p.nom.toLowerCase().includes(q))
-  }, [piecesDisponibles, rechercheItem])
-
-  function quantiteSousEnsemble(seId: string): number {
-    return items.find((i) => i.sous_ensemble_id === seId)?.quantite ?? 0
-  }
-
-  function quantitePiece(pieceId: string): number {
-    return items.find((i) => i.piece_id === pieceId)?.quantite ?? 0
-  }
-
-  function ajusterItemSousEnsemble(se: SousEnsemble, delta: number) {
-    setItems((prev) => {
-      const existant = prev.find((i) => i.sous_ensemble_id === se.id)
-      const actuelle = existant?.quantite ?? 0
-      const max = se.quantite + actuelle
-      const nouvelle = Math.max(0, Math.min(max, actuelle + delta))
-      if (nouvelle === 0) {
-        return prev.filter((i) => i.sous_ensemble_id !== se.id)
-      }
-      if (existant) {
-        return prev.map((i) => (i.sous_ensemble_id === se.id ? { ...i, quantite: nouvelle } : i))
-      }
-      return [...prev, { sous_ensemble_id: se.id, piece_id: null, nom: se.nom, quantite: nouvelle }]
-    })
-  }
-
-  function ajusterItemPiece(piece: Piece, delta: number) {
-    setItems((prev) => {
-      const existant = prev.find((i) => i.piece_id === piece.id)
-      const actuelle = existant?.quantite ?? 0
-      const max = piece.quantite + actuelle
-      const nouvelle = Math.max(0, Math.min(max, actuelle + delta))
-      if (nouvelle === 0) {
-        return prev.filter((i) => i.piece_id !== piece.id)
-      }
-      if (existant) {
-        return prev.map((i) => (i.piece_id === piece.id ? { ...i, quantite: nouvelle } : i))
-      }
-      return [...prev, { sous_ensemble_id: null, piece_id: piece.id, nom: piece.nom, quantite: nouvelle }]
-    })
-  }
-
-  // Édition du contenu autorisée à la finalisation, ou lors de la modification
-  // d'une expédition déjà envoyée/reçue (le stock est alors réajusté à l'enregistrement).
-  // Une bouée complète part toujours en un exemplaire du produit fini : il n'y
-  // a rien à choisir, donc pas de section contenu. Les autres types (SAV, don,
-  // démo, autre) demandent de préciser ce qui a réellement été expédié.
   const categorieEffective: CategorieExpedition | null = expedition?.categorie ?? (categorie || null)
-  const estBoueeComplete = categorieEffective === 'vente'
-  const sousEnsembleBouee = useMemo(
-    () => sousEnsembles.find((s) => s.id === sousEnsembleBoueeId) ?? null,
-    [sousEnsembles, sousEnsembleBoueeId]
-  )
-
-  const editionContenuAutorisee = !estBoueeComplete && (
-    mode === 'finaliser' || (mode === 'modifier' && expedition?.statut !== 'a_expedier')
-  )
 
   async function soumettre(e: React.FormEvent) {
     e.preventDefault()
     if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du destinataire requis'); return }
     if (mode === 'finaliser' && !categorieEffective) { setErreur('Veuillez choisir un type de commande'); return }
-    if (mode === 'finaliser' && estBoueeComplete && !sousEnsembleBouee) {
-      setErreur("Aucun sous-ensemble « bouée complète » n'est configuré : impossible de décompter le stock.")
-      return
-    }
+    if (mode === 'finaliser' && items.length === 0) { setErreur("Choisissez au moins un produit sorti de l'atelier"); return }
 
     setEnvoi(true)
     setErreur(null)
@@ -347,58 +269,10 @@ export default function ModalExpedition({
         })
         if (error) throw error
       } else if (mode === 'modifier' && expedition) {
-        // Si l'expédition est déjà envoyée/reçue, on répercute les différences
-        // de contenu sur les stocks (sous-ensembles et pièces classiques).
+        // Expédition déjà partie : le stock a été décompté sur l'ancien contenu,
+        // on ne répercute que la différence.
         if (expedition.statut !== 'a_expedier') {
-          const cle = (i: ExpeditionItem) => (i.sous_ensemble_id ? `se:${i.sous_ensemble_id}` : `p:${i.piece_id}`)
-          const mapAncien = new Map((expedition.items ?? []).map((i) => [cle(i), i.quantite]))
-          const mapNouveau = new Map(items.map((i) => [cle(i), i.quantite]))
-          const clesTouchees = new Set([...mapAncien.keys(), ...mapNouveau.keys()])
-
-          for (const c of clesTouchees) {
-            const avant = mapAncien.get(c) ?? 0
-            const apres = mapNouveau.get(c) ?? 0
-            const delta = apres - avant
-            if (delta === 0) continue
-
-            if (c.startsWith('se:')) {
-              const se = sousEnsembles.find((s) => s.id === c.slice(3))
-              if (!se) continue
-              const nouvelleQuantite = se.quantite - delta
-              const { error: errSe } = await supabase
-                .from('sous_ensembles')
-                .update({ quantite: nouvelleQuantite })
-                .eq('id', se.id)
-              if (errSe) throw errSe
-              await creerOperation({
-                type: 'expedition',
-                sous_ensemble_id: se.id,
-                quantite_avant: se.quantite,
-                quantite_apres: nouvelleQuantite,
-                delta: -delta,
-                utilisateur_id: utilisateur.id,
-                commentaire: `Modification expédition — ${prenom.trim()} ${nom.trim()}`,
-              })
-            } else {
-              const piece = pieces.find((p) => p.id === c.slice(2))
-              if (!piece) continue
-              const nouvelleQuantite = piece.quantite - delta
-              const { error: errPiece } = await supabase
-                .from('pieces')
-                .update({ quantite: nouvelleQuantite })
-                .eq('id', piece.id)
-              if (errPiece) throw errPiece
-              await creerOperation({
-                type: 'expedition',
-                piece_id: piece.id,
-                quantite_avant: piece.quantite,
-                quantite_apres: nouvelleQuantite,
-                delta: -delta,
-                utilisateur_id: utilisateur.id,
-                commentaire: `Modification expédition — ${prenom.trim()} ${nom.trim()}`,
-              })
-            }
-          }
+          await ajusterContenu(expedition.items ?? [], items, utilisateur.id, `Modification expédition — ${prenom.trim()} ${nom.trim()}`)
         }
 
         const { error } = await supabase
@@ -411,49 +285,7 @@ export default function ModalExpedition({
           .eq('id', expedition.id)
         if (error) throw error
       } else if (expedition) {
-        const libelleOperation = `Expédition — ${prenom.trim()} ${nom.trim()}`
-
-        // Une bouée complète n'a pas de contenu à choisir : on décompte
-        // d'office un exemplaire du sous-ensemble produit fini.
-        const itemsExpedies: ExpeditionItem[] = estBoueeComplete
-          ? (sousEnsembleBouee
-              ? [{ sous_ensemble_id: sousEnsembleBouee.id, piece_id: null, nom: sousEnsembleBouee.nom, quantite: 1 }]
-              : [])
-          : items
-
-        for (const item of itemsExpedies) {
-          if (item.sous_ensemble_id) {
-            // Le stock assemblé est consommé en priorité ; ce qui manque est
-            // décompté sur les composants, comme si l'assemblage avait eu lieu.
-            await consommerSousEnsembleExpedie({
-              sousEnsembleId: item.sous_ensemble_id,
-              quantite: item.quantite,
-              pieces,
-              sousEnsembles,
-              utilisateurId: utilisateur.id,
-              commentaire: libelleOperation,
-            })
-          } else if (item.piece_id) {
-            const piece = pieces.find((p) => p.id === item.piece_id)
-            if (!piece) continue
-            const nouvelleQuantite = piece.quantite - item.quantite
-            const { error: errPiece } = await supabase
-              .from('pieces')
-              .update({ quantite: nouvelleQuantite })
-              .eq('id', piece.id)
-            if (errPiece) throw errPiece
-
-            await creerOperation({
-              type: 'expedition',
-              piece_id: piece.id,
-              quantite_avant: piece.quantite,
-              quantite_apres: nouvelleQuantite,
-              delta: -item.quantite,
-              utilisateur_id: utilisateur.id,
-              commentaire: libelleOperation,
-            })
-          }
-        }
+        await sortirContenu(items, utilisateur.id, `Expédition — ${prenom.trim()} ${nom.trim()}`)
 
         // Génération automatique du numéro de série à la finalisation
         // (l'admin peut avoir déjà saisi/modifié un numéro manuellement dans le champ dédié)
@@ -469,7 +301,7 @@ export default function ModalExpedition({
           .update({
             ...champsCommuns,
             statut: 'envoye',
-            items: itemsExpedies,
+            items,
             numero_serie: numeroSerieFinal,
             date_expedition: new Date().toISOString(),
           })
@@ -748,139 +580,19 @@ export default function ModalExpedition({
             </div>
           )}
 
-          {/* Contenu du colis : sous-ensembles + pièces du stock classique — zone distincte pour bien la séparer visuellement du reste du formulaire */}
-          {/* Bouée complète : le contenu est implicite, on rappelle simplement
-              ce qui sera décompté du stock. */}
-          {estBoueeComplete && mode === 'finaliser' && (
-            <div className="border border-primary-100 rounded-xl px-4 py-3 bg-primary-50">
-              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1">
-                Contenu du colis
-              </p>
-              {sousEnsembleBouee ? (
-                <p className="text-xs text-primary-600 leading-relaxed">
-                  1 × <span className="font-semibold text-primary-900">{sousEnsembleBouee.nom}</span>
-                  {sousEnsembleBouee.quantite > 0
-                    ? ` — pris sur le stock (${sousEnsembleBouee.quantite} disponible${sousEnsembleBouee.quantite > 1 ? 's' : ''}).`
-                    : " — aucun en stock, les composants de sa nomenclature seront décomptés à sa place."}
-                </p>
-              ) : (
-                <p className="text-xs text-danger-600 leading-relaxed">
-                  Aucun sous-ensemble « bouée complète » n'est configuré : le stock ne pourra pas être décompté.
-                </p>
-              )}
-            </div>
-          )}
-
-          {editionContenuAutorisee && (
-            <div className="space-y-4 bg-primary-50/80 border border-primary-100 rounded-2xl p-3.5">
-              <div className="relative">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={rechercheItem}
-                  onChange={(e) => setRechercheItem(e.target.value)}
-                  placeholder="Rechercher un élément du stock…"
-                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
-                  autoComplete="off"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                  Sous-ensembles {mode === 'modifier' ? 'du colis' : 'en stock à expédier'}
-                </label>
-                {sousEnsemblesFiltres.length === 0 ? (
-                  <p className="text-xs text-primary-400 italic">
-                    {rechercheItem.trim() ? 'Aucun résultat' : 'Aucun sous-ensemble en stock'}
-                  </p>
-                ) : (
-                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                    {sousEnsemblesFiltres.map((se) => {
-                      const qte = quantiteSousEnsemble(se.id)
-                      const max = se.quantite + qte
-                      return (
-                        <div
-                          key={se.id}
-                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2 bg-white"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-primary-900 truncate">{se.nom}</p>
-                            <p className="text-[11px] text-primary-400 tabular-nums">Stock : {se.quantite}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => ajusterItemSousEnsemble(se, -1)}
-                              disabled={qte === 0}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
-                            >
-                              <Minus size={11} />
-                            </button>
-                            <span className="w-6 text-center text-sm font-bold tabular-nums text-primary-900">{qte}</span>
-                            <button
-                              type="button"
-                              onClick={() => ajusterItemSousEnsemble(se, 1)}
-                              disabled={qte >= max}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
-                            >
-                              <PlusIcon size={11} />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                  Pièces du stock classique (mousqueton, dyneema…)
-                </label>
-                {piecesFiltrees.length === 0 ? (
-                  <p className="text-xs text-primary-400 italic">
-                    {rechercheItem.trim() ? 'Aucun résultat' : 'Aucune pièce en stock'}
-                  </p>
-                ) : (
-                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                    {piecesFiltrees.map((p) => {
-                      const qte = quantitePiece(p.id)
-                      const max = p.quantite + qte
-                      return (
-                        <div
-                          key={p.id}
-                          className="flex items-center justify-between gap-2 border border-primary-100 rounded-xl px-3 py-2 bg-white"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-primary-900 truncate">{p.nom}</p>
-                            <p className="text-[11px] text-primary-400 tabular-nums">Stock : {p.quantite}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => ajusterItemPiece(p, -1)}
-                              disabled={qte === 0}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
-                            >
-                              <Minus size={11} />
-                            </button>
-                            <span className="w-6 text-center text-sm font-bold tabular-nums text-primary-900">{qte}</span>
-                            <button
-                              type="button"
-                              onClick={() => ajusterItemPiece(p, 1)}
-                              disabled={qte >= max}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg border border-primary-200 text-primary-600 disabled:opacity-30"
-                            >
-                              <PlusIcon size={11} />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Produits sortis de l'atelier : leurs composants sont décomptés à la validation */}
+          <div className="bg-primary-50/80 border border-primary-100 rounded-2xl p-3.5">
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Contenu du colis{mode === 'finaliser' ? ' *' : ''}{' '}
+              <span className="text-primary-400 font-normal normal-case tracking-normal">(plusieurs choix possibles)</span>
+            </label>
+            <SelecteurProduits sousEnsembles={sousEnsembles} items={items} onChange={setItems} />
+            <p className="text-[11px] text-primary-500 mt-2">
+              {mode === 'creer' || expedition?.statut === 'a_expedier'
+                ? "Les composants de chaque produit seront décomptés du stock à la validation de l'expédition."
+                : 'Expédition déjà partie : toute modification du contenu est répercutée sur le stock des composants.'}
+            </p>
+          </div>
 
           {/* Transporteur + suivi */}
           <div className="grid grid-cols-2 gap-3">

@@ -34,6 +34,8 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
   const isAdmin = utilisateur.role === 'patron'
   const [description, setDescription] = useState(piece.description ?? '')
   const [categorie, setCategorie] = useState(piece.categorie ?? '')
+  const [reference, setReference] = useState(piece.reference ?? '')
+  const [fournisseur, setFournisseur] = useState(piece.fournisseur ?? '')
   const [seuilRouge, setSeuilRouge] = useState(String(piece.seuil_rouge))
   const [seuilJaune, setSeuilJaune] = useState(String(piece.seuil_jaune))
   const [seuilVert, setSeuilVert] = useState(String(piece.seuil_vert))
@@ -64,6 +66,8 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
     const adminFieldsChanged = isAdmin && (
       description !== (piece.description ?? '') ||
       categorie !== (piece.categorie ?? '') ||
+      reference.trim() !== (piece.reference ?? '') ||
+      fournisseur.trim() !== (piece.fournisseur ?? '') ||
       parseInt(seuilRouge, 10) !== piece.seuil_rouge ||
       parseInt(seuilJaune, 10) !== piece.seuil_jaune ||
       parseInt(seuilVert, 10) !== piece.seuil_vert ||
@@ -100,6 +104,8 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
       if (isAdmin) {
         updatePayload.description = description.trim() || null
         updatePayload.categorie = categorie.trim() || null
+        updatePayload.reference = reference.trim() || null
+        updatePayload.fournisseur = fournisseur.trim() || null
         updatePayload.seuil_rouge = parseInt(seuilRouge, 10) || 0
         updatePayload.seuil_jaune = parseInt(seuilJaune, 10) || 0
         updatePayload.seuil_vert = parseInt(seuilVert, 10) || 0
@@ -304,6 +310,34 @@ export default function ModalModifierQuantite({ piece, utilisateur, categoriesEx
                     {categoriesExistantes.map((c) => <option key={c} value={c} />)}
                   </datalist>
                 )}
+              </div>
+
+              {/* Référence + fournisseur */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                    Référence
+                  </label>
+                  <input
+                    type="text"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    placeholder="Réf. fabricant ou fournisseur"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 text-sm placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+                    Fournisseur
+                  </label>
+                  <input
+                    type="text"
+                    value={fournisseur}
+                    onChange={(e) => setFournisseur(e.target.value)}
+                    placeholder="Ex : JLCPCB, Würth…"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-primary-900 text-sm placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  />
+                </div>
               </div>
 
               {/* Seuils */}
