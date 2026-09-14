@@ -44,7 +44,7 @@ L'application est alors accessible sur `http://localhost:5173`
 
 ### Pages (dans l'ordre du menu)
 - **Tableau de bord** — CA du mois, commandes du mois, colis fabricables, alertes, achats recommandés, objectif de vente mensuel
-- **Ventes** — saisie d'une vente (client, type Vente / SAV / Don, contenu, facture émise, origines multiples, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
+- **Ventes** — saisie d'une vente (client, type Vente / SAV / Don, contenu, facture émise, origines multiples, commentaire, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine, commentaire et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
 - **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, n° de série proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable
 - **Stock** — pièces avec seuils, prix unitaire et MOQ ; fiche détaillée au clic (référence, fournisseur, sous-ensembles qui l'utilisent) ; modale *Gérer les sous-ensembles*
 - **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection

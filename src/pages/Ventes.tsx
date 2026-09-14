@@ -99,7 +99,7 @@ export default function Ventes() {
   function exporterCsv() {
     const entetes = [
       'Date de commande', 'Prénom', 'Nom', 'Adresse', 'Langue', 'Type de commande',
-      'Contenu', 'Facture émise', 'Origine', 'Commentaire origine', 'Type de bateau', 'Montant payé HT (€)',
+      'Contenu', 'Facture émise', 'Origine', 'Commentaire origine', 'Commentaire', 'Type de bateau', 'Montant payé HT (€)',
     ]
     const lignes = ventesFiltrees.map((v) => [
       formatDate(v.date_commande),
@@ -112,6 +112,7 @@ export default function Ventes() {
       v.facture_emise == null ? '' : v.facture_emise ? 'Oui' : 'Non',
       originesDeLaVente(v).map((o) => ORIGINE_VENTE_LABEL[o]).join(" + "),
       v.commentaire_origine ?? '',
+      v.commentaire ?? '',
       v.type_bateau ?? '',
       v.montant_paye != null ? String(v.montant_paye).replace('.', ',') : '',
     ])

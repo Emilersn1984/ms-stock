@@ -45,6 +45,7 @@ export default function ModalVente({ mode, vente, clients, sousEnsembles, utilis
     vente?.origines_vente ?? (vente?.origine_vente ? [vente.origine_vente] : [])
   )
   const [commentaireOrigine, setCommentaireOrigine] = useState(vente?.commentaire_origine ?? '')
+  const [commentaire, setCommentaire] = useState(vente?.commentaire ?? '')
   const [typeBateau, setTypeBateau] = useState(vente?.type_bateau ?? '')
   const [factureEmise, setFactureEmise] = useState<boolean | null>(vente?.facture_emise ?? null)
   const [items, setItems] = useState<ExpeditionItem[]>(vente?.items ?? [])
@@ -133,6 +134,7 @@ export default function ModalVente({ mode, vente, clients, sousEnsembles, utilis
         origines_vente: originesVente,
         origine_vente: originesVente[0] ?? null,
         commentaire_origine: commentaireOrigine.trim() || null,
+        commentaire: commentaire.trim() || null,
         type_bateau: typeBateau.trim() || null,
         facture_emise: factureEmise,
         items,
@@ -450,6 +452,22 @@ export default function ModalVente({ mode, vente, clients, sousEnsembles, utilis
               onChange={(e) => setCommentaireOrigine(e.target.value)}
               rows={2}
               placeholder="Ex : Nautic Paris 2026, recommandation d'un client…"
+              className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
+            />
+          </div>
+
+          {/* Commentaire sur la vente — même champ que « Commentaire / instructions »
+              à la finalisation de l'expédition */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
+              Commentaire{' '}
+              <span className="text-primary-400 font-normal normal-case tracking-normal">(facultatif)</span>
+            </label>
+            <textarea
+              value={commentaire}
+              onChange={(e) => setCommentaire(e.target.value)}
+              rows={2}
+              placeholder="Ex : livraison au port, option Lexan blanc…"
               className="w-full border border-primary-200 rounded-xl px-4 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
             />
           </div>
