@@ -22,6 +22,7 @@ L'application est alors accessible sur `http://localhost:5173`
 - **Backend :** Supabase
 - **Routing :** react-router-dom
 - **Icons :** lucide-react
+- **Lecture Excel :** read-excel-file (chargé à la demande)
 
 ## 🎨 Design System
 
@@ -47,7 +48,7 @@ L'application est alors accessible sur `http://localhost:5173`
 - **Ventes** — saisie d'une vente (client, type Vente / SAV / Don, contenu, facture émise, origines multiples, commentaire, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine, commentaire et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
 - **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, n° de série proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable
 - **Stock** — pièces avec seuils, prix unitaire et MOQ ; fiche détaillée au clic (référence, fournisseur, sous-ensembles qui l'utilisent) ; modale *Gérer les sous-ensembles*
-- **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection
+- **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection ; modale *Gérer stocks JLC*
 - **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant
 - **Historique** — une ligne par vente ou par achat, avec montants perçus et dépensés
 
@@ -59,6 +60,17 @@ de chaque produit est explosée récursivement et les composants unitaires sont 
 (`src/utils/consommerExpedition.ts`). Renvoyer l'expédition vers « à expédier » les remet en stock ;
 modifier le contenu d'une expédition déjà envoyée ne répercute que la différence. Marquer reçu
 ou annuler la réception ne touche pas au stock.
+
+### Stocks JLC (composants des cartes électroniques)
+Reprise du fichier *JLC Stock Manager*, accessible depuis Achats MP → *Gérer stocks JLC* :
+- **BOM** des cartes (table `jlc_bom`) : référence JLCPCB et quantité par produit, modifiables
+  (ajout, suppression, quantité).
+- **Paramètre** « Stock min (nombre de produits) » : stock cible = quantité par produit × ce nombre.
+- **Import** d'un export *Parts Inventory on JLCPCB* (.xlsx, lu dans le navigateur avec
+  `read-excel-file`). Colonnes repérées par leur en-tête. Stock actuel = max(JLCPCB, Global
+  Sourcing), manque = stock actuel − stock cible. Une référence absente de l'inventaire compte pour 0.
+- Le **dernier import** est enregistré dans `parametres` et réaffiché à l'ouverture.
+- Tableau des manques : référence, qté / produit, stock actuel, stock cible, manque (négatif, en rouge).
 
 ### Anciennes pages supprimées
 Les pages *Nomenclature* et *Fabrication* ont été supprimées ; la nomenclature se gère
@@ -94,8 +106,9 @@ Base gérée via Supabase. Tables :
 | `expeditions` | Ventes et expéditions (même enregistrement) ; `items` = produits sortis, `facture_emise` |
 | `commandes` | Achats de matières premières |
 | `alertes_manuelles` | Alertes créées depuis le tableau de bord |
-| `parametres` | Table singleton : objectif de vente, prix de vente moyen, trésorerie initiale, sous-ensemble « bouée complète », mois de départ des projections |
+| `parametres` | Table singleton : objectif de vente, prix de vente moyen, trésorerie initiale, sous-ensemble « bouée complète », mois de départ des projections, paramètre et dernier inventaire JLC |
 | `projections_lignes` | Lignes du plan de trésorerie |
+| `jlc_bom` | BOM des cartes électroniques (référence JLCPCB, quantité par produit) |
 
 ### Migrations SQL
 
@@ -111,6 +124,7 @@ l'éditeur SQL de Supabase. Les plus récents sont rejouables sans risque
 - `add-commandes-groupe.sql` — `groupe_id` pour les commandes multi-références
 - `add-origines-multiples.sql` — plusieurs origines par vente, et CA TTC réalisé
 - `add-produits-facture-fournisseur.sql` — référence et fournisseur des pièces, facture émise, produits vendables sur les sous-ensembles
+- `add-jlc-stock.sql` — table `jlc_bom` (BOM initiale de 68 références), paramètre et dernier inventaire JLC
 
 ## 🔐 Configuration
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Truck, Check, AlertCircle, Plus, PackageSearch, Pencil, X, Trash2 } from 'lucide-react'
+import { Truck, Check, AlertCircle, Plus, PackageSearch, Pencil, X, Trash2, Cpu } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStock } from '../hooks/useStock'
 import { useCommandes } from '../hooks/useCommandes'
@@ -11,6 +11,7 @@ import type { AchatRecommande } from '../utils/calcAchatsRecommandes'
 import { calcBesoinPieces } from '../utils/calcDisponibilite'
 import { buildTrackingUrl, TRANSPORTEURS } from '../utils/trackingUrl'
 import ModalNouvelleCommande from '../components/ModalNouvelleCommande'
+import ModalStocksJlc from '../components/ModalStocksJlc'
 import GraphiqueAchatsMensuels from '../components/GraphiqueAchatsMensuels'
 import HistoriqueCommandes from '../components/HistoriqueCommandes'
 import { Piece, Commande, Transporteur, SousEnsemble } from '../types'
@@ -75,7 +76,7 @@ function AchatRow({ achat, onCommander }: { achat: AchatRecommande; onCommander:
               <span>Délai: <span className="font-bold">{achat.piece.delai_appro} sem</span></span>
             )}
             <span className={critique ? 'text-danger-600 font-bold' : 'text-alert-600 font-bold'}>
-              Restant estimé: {achat.stockRestantEstime}
+              Restant estimé: {Math.round(achat.stockRestantEstime)}
             </span>
           </div>
         ) : (
@@ -295,6 +296,7 @@ export default function Commandes() {
   const [chargementNom, setChargementNom] = useState(true)
 
   const [modalOuvert, setModalOuvert] = useState(false)
+  const [modalJlcOuvert, setModalJlcOuvert] = useState(false)
   const [pieceModal, setPieceModal] = useState<Piece | null>(null)
   const [commandeEnEdition, setCommandeEnEdition] = useState<Commande | null>(null)
   const [receptionEnCours, setReceptionEnCours] = useState<string | null>(null)
@@ -442,13 +444,22 @@ export default function Commandes() {
             Achats de matières premières
           </p>
         </div>
-        <button
-          onClick={() => ouvrirModal(null)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors"
-        >
-          <Plus size={15} />
-          <span className="hidden sm:inline">Commander une pièce</span>
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setModalJlcOuvert(true)}
+            className="flex items-center gap-2 border border-primary-200 text-primary-700 hover:bg-primary-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+          >
+            <Cpu size={15} />
+            <span className="hidden sm:inline">Gérer stocks JLC</span>
+          </button>
+          <button
+            onClick={() => ouvrirModal(null)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-900 hover:bg-primary-800 active:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Plus size={15} />
+            <span className="hidden sm:inline">Commander une pièce</span>
+          </button>
+        </div>
       </div>
 
       {erreurReception && (
@@ -530,6 +541,7 @@ export default function Commandes() {
           onCreated={rechargerCommandes}
         />
       )}
+      {modalJlcOuvert && <ModalStocksJlc onClose={() => setModalJlcOuvert(false)} />}
     </div>
   )
 }

@@ -238,7 +238,7 @@ function AchatRow({ achat, commandee }: { achat: AchatRecommande; commandee?: bo
               <span>Délai: <span className="font-bold">{achat.piece.delai_appro} sem</span></span>
             )}
             <span className={critique ? 'text-danger-600 font-bold' : 'text-alert-600 font-bold'}>
-              Restant estimé: {achat.stockRestantEstime}
+              Restant estimé: {Math.round(achat.stockRestantEstime)}
             </span>
           </div>
         ) : (
