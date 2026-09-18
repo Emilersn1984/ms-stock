@@ -9,6 +9,7 @@ import { useParametreProduction } from '../hooks/useParametreProduction'
 import { projeterAchatsMatieresPremieres } from '../utils/projectionAchats'
 import GraphiqueLigne from '../components/GraphiqueLigne'
 import ConfirmDialog from '../components/ConfirmDialog'
+import SectionFacturesFournisseurs from '../components/SectionFacturesFournisseurs'
 import { LigneProjection, SectionProjection } from '../types'
 
 const NB_MOIS = 3
@@ -650,6 +651,9 @@ export default function Projections() {
               </p>
             )}
           </div>
+
+          {/* Factures fournisseurs — repliée tant qu'on ne la déroule pas */}
+          <SectionFacturesFournisseurs />
 
           {/* Recettes */}
           <TableauSection

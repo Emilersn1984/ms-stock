@@ -160,6 +160,8 @@ export type Expedition = {
   transporteur: Transporteur | null
   numero_suivi: string | null
   numero_serie: string | null
+  // Un numéro par bouée expédiée ; numero_serie reprend le premier.
+  numeros_serie: string[] | null
   montant_paye: number | null
   origine_vente: OrigineVente | null
   origines_vente: OrigineVente[] | null
@@ -174,6 +176,17 @@ export type Expedition = {
   utilisateur_id: string | null
   created_at: string
   clients?: { id: string; nom: string; prenom: string } | null
+}
+
+// Facture fournisseur à payer. date_paiement à NULL = encore due.
+export type FactureFournisseur = {
+  id: string
+  fournisseur: string
+  libelle: string | null
+  montant_ttc: number
+  date_echeance: string
+  date_paiement: string | null
+  created_at: string
 }
 
 export type SectionProjection = 'recettes' | 'depenses'
