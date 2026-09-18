@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { PackagePlus, Send, Search, X, Pencil, UserSearch, UserPlus2 } from 'lucide-react'
+import { PackagePlus, Send, Search, X, Plus as PlusIcon, Pencil, UserSearch, UserPlus2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   Client,
@@ -16,6 +16,7 @@ import { LANGUES } from '../utils/langues'
 import { drapeauPays } from '../utils/pays'
 import { sortirContenu, ajusterContenu } from '../utils/consommerExpedition'
 import { PRODUIT_ATELIER_LABEL, sousEnsemblesParProduit } from '../utils/produitsAtelier'
+import { numerosSerieExpedition, prochainNumeroSerie } from '../utils/numerosSerie'
 import SelecteurProduits from './SelecteurProduits'
 import { CATEGORIE_LABEL, CATEGORIE_BADGE, CATEGORIES_TOUTES } from '../utils/categoriesExpedition'
 
@@ -38,22 +39,11 @@ function adresseComplete(c: { adresse?: string | null; code_postal?: string | nu
   return [c.adresse, c.code_postal, c.ville].filter((v) => v && v.trim()).join('\n')
 }
 
-/**
- * Numéro de série proposé par défaut : le plus haut déjà distribué, incrémenté
- * de 1. On ne lit que la partie numérique finale, pour rester tolérant aux
- * anciens formats (« 00001 » aussi bien que « SN-26-00007 »).
- */
-function prochainNumeroSerie(expeditions: Expedition[]): string {
-  let maximum = 0
-  for (const e of expeditions) {
-    if (!e.numero_serie) continue
-    const chiffres = e.numero_serie.match(/(\d+)\s*$/)
-    if (!chiffres) continue
-    const n = parseInt(chiffres[1], 10)
-    if (Number.isFinite(n) && n > maximum) maximum = n
-  }
-  const annee = String(new Date().getFullYear()).slice(-2)
-  return `SN-${annee}-${String(maximum + 1).padStart(5, '0')}`
+/** Nombre de bouées complètes dans le colis : autant de numéros de série. */
+function nombreBouees(items: ExpeditionItem[], sousEnsembles: SousEnsemble[]): number {
+  const bouee = sousEnsemblesParProduit(sousEnsembles).get('bouee_complete')
+  if (!bouee) return 0
+  return items.filter((i) => i.sous_ensemble_id === bouee.id).reduce((s, i) => s + i.quantite, 0)
 }
 
 export default function ModalExpedition({
@@ -106,12 +96,42 @@ export default function ModalExpedition({
     return []
   })
 
-  // À la finalisation, on pré-remplit avec le prochain numéro libre ; il reste
-  // modifiable, et la génération côté base ne sert plus que de filet.
-  const [numeroSerie, setNumeroSerie] = useState(
-    expedition?.numero_serie
-      ?? (mode === 'finaliser' ? prochainNumeroSerie(expeditionsExistantes) : '')
-  )
+  // Un numéro de série par bouée. À la finalisation on pré-remplit avec les
+  // prochains numéros libres ; ils restent modifiables, et la génération côté
+  // base ne sert plus que de filet.
+  // Les numéros ne sont proposés d'office qu'à la finalisation, ou sur une
+  // expédition qui en a déjà : sur une commande encore à expédier, les champs
+  // s'ouvrent vides pour ne pas consommer des numéros sans le vouloir.
+  const numerotationAutomatique = mode === 'finaliser' || numerosSerieExpedition(expedition ?? {}).length > 0
+
+  const [numerosSerie, setNumerosSerie] = useState<string[]>(() => {
+    const existants = numerosSerieExpedition(expedition ?? {})
+    if (existants.length > 0) return existants
+    if (mode === 'creer') return []
+    const nb = nombreBouees(items, sousEnsembles)
+    if (mode === 'modifier') return Array.from({ length: nb }, () => '')
+    return Array.from({ length: Math.max(1, nb) }, (_, i) => prochainNumeroSerie(expeditionsExistantes, i + 1))
+  })
+
+  // Nombre de champs déjà ouverts automatiquement : on ne complète que ce qui
+  // manque, et un champ retiré à la main ne revient pas.
+  const champsOuverts = useRef(numerosSerie.length)
+
+  // Un colis de deux bouées ouvre deux champs, aussi bien à la finalisation
+  // qu'en modification d'une expédition existante.
+  useEffect(() => {
+    if (mode === 'creer') return
+    const nb = nombreBouees(items, sousEnsembles)
+    if (nb <= champsOuverts.current) return
+    const manquants = nb - champsOuverts.current
+    champsOuverts.current = nb
+    setNumerosSerie((prev) => [
+      ...prev,
+      ...Array.from({ length: manquants }, (_, i) =>
+        numerotationAutomatique ? prochainNumeroSerie(expeditionsExistantes, i + 1, prev) : ''
+      ),
+    ])
+  }, [items, sousEnsembles, mode, numerotationAutomatique, expeditionsExistantes])
   const [dateEnvoiPrevisionnelle, setDateEnvoiPrevisionnelle] = useState(
     expedition?.date_envoi_previsionnelle ? expedition.date_envoi_previsionnelle.slice(0, 10) : ''
   )
@@ -162,11 +182,11 @@ export default function ModalExpedition({
         prenomDest: undefined as string | undefined,
       }))
     const parSerie = expeditionsExistantes
-      .filter((e) => e.numero_serie && e.numero_serie.toLowerCase().includes(q))
-      .map((e) => ({
+      .flatMap((e) => numerosSerieExpedition(e).filter((n) => n.toLowerCase().includes(q)).map((n) => ({ e, n })))
+      .map(({ e, n }) => ({
         type: 'serie' as const,
         client: (e.clients ? clients.find((c) => c.id === e.clients!.id) ?? null : null) as Client | null,
-        numeroSerie: e.numero_serie as string | null,
+        numeroSerie: n as string | null,
         nomDest: e.nom_destinataire as string | undefined,
         prenomDest: e.prenom_destinataire as string | undefined,
       }))
@@ -205,6 +225,9 @@ export default function ModalExpedition({
     if (!nom.trim() || !prenom.trim()) { setErreur('Nom et prénom du destinataire requis'); return }
     if (mode === 'finaliser' && !categorieEffective) { setErreur('Veuillez choisir un type de commande'); return }
     if (mode === 'finaliser' && items.length === 0) { setErreur("Choisissez au moins un produit sorti de l'atelier"); return }
+
+    // Numéros vides ignorés, doublons écartés.
+    const numerosSerieSaisis = [...new Set(numerosSerie.map((n) => n.trim()).filter(Boolean))]
 
     setEnvoi(true)
     setErreur(null)
@@ -280,20 +303,21 @@ export default function ModalExpedition({
           .update({
             ...champsCommuns,
             items,
-            ...(isAdmin ? { numero_serie: numeroSerie.trim() || null } : {}),
+            ...(isAdmin ? { numeros_serie: numerosSerieSaisis, numero_serie: numerosSerieSaisis[0] ?? null } : {}),
           })
           .eq('id', expedition.id)
         if (error) throw error
       } else if (expedition) {
         await sortirContenu(items, utilisateur.id, `Expédition — ${prenom.trim()} ${nom.trim()}`)
 
-        // Génération automatique du numéro de série à la finalisation
-        // (l'admin peut avoir déjà saisi/modifié un numéro manuellement dans le champ dédié)
-        let numeroSerieFinal: string | null = numeroSerie.trim() || expedition.numero_serie || null
-        if (!numeroSerieFinal) {
+        // Génération automatique si aucun numéro n'a été saisi à la finalisation.
+        let numerosFinaux = numerosSerieSaisis.length > 0
+          ? numerosSerieSaisis
+          : numerosSerieExpedition(expedition)
+        if (numerosFinaux.length === 0) {
           const { data: serieData, error: errSerie } = await supabase.rpc('generate_numero_serie')
           if (errSerie) throw errSerie
-          numeroSerieFinal = serieData as string
+          numerosFinaux = [serieData as string]
         }
 
         const { error } = await supabase
@@ -302,7 +326,8 @@ export default function ModalExpedition({
             ...champsCommuns,
             statut: 'envoye',
             items,
-            numero_serie: numeroSerieFinal,
+            numeros_serie: numerosFinaux,
+            numero_serie: numerosFinaux[0] ?? null,
             date_expedition: new Date().toISOString(),
           })
           .eq('id', expedition.id)
@@ -658,19 +683,45 @@ export default function ModalExpedition({
           {isAdmin && (mode === 'modifier' || mode === 'finaliser') ? (
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                N° de série {mode === 'finaliser' ? '(laisser vide pour génération automatique)' : ''}
+                N° de série{numerosSerie.length > 1 ? 's' : ''}{' '}
+                <span className="text-primary-400 font-normal normal-case tracking-normal">
+                  (un par bouée{mode === 'finaliser' ? ', laisser vide pour génération automatique' : ''})
+                </span>
               </label>
-              <input
-                type="text"
-                value={numeroSerie}
-                onChange={(e) => setNumeroSerie(e.target.value)}
-                placeholder="Généré automatiquement si vide"
-                className="w-full border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-              />
+              <div className="space-y-2">
+                {numerosSerie.map((numero, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={numero}
+                      onChange={(e) => setNumerosSerie((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))}
+                      placeholder="Généré automatiquement si vide"
+                      className="flex-1 border border-primary-200 rounded-xl px-3 py-2.5 text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                    />
+                    {numerosSerie.length > 1 && (
+                      <button
+                        type="button"
+                        title="Retirer ce numéro"
+                        onClick={() => setNumerosSerie((prev) => prev.filter((_, j) => j !== i))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-primary-400 hover:bg-danger-100 hover:text-danger-600 transition-colors flex-shrink-0"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setNumerosSerie((prev) => [...prev, prochainNumeroSerie(expeditionsExistantes, 1, prev)])}
+                className="mt-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-primary-500 hover:text-primary-900 transition-colors"
+              >
+                <PlusIcon size={12} /> Ajouter un numéro
+              </button>
             </div>
-          ) : expedition?.numero_serie ? (
+          ) : numerosSerieExpedition(expedition ?? {}).length > 0 ? (
             <p className="text-xs text-primary-500">
-              N° de série : <span className="font-bold text-primary-800">{expedition.numero_serie}</span>
+              N° de série : <span className="font-bold text-primary-800">{numerosSerieExpedition(expedition ?? {}).join(', ')}</span>
             </p>
           ) : null}
 

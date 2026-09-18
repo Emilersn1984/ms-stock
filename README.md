@@ -46,10 +46,10 @@ L'application est alors accessible sur `http://localhost:5173`
 ### Pages (dans l'ordre du menu)
 - **Tableau de bord** — CA du mois, commandes du mois, colis fabricables, alertes, achats recommandés, objectif de vente mensuel
 - **Ventes** — saisie d'une vente (client, type Vente / SAV / Don, contenu, facture émise, origines multiples, commentaire, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine, commentaire et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
-- **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, n° de série proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable
+- **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, un n° de série par bouée proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable avec une ligne par n° de série
 - **Stock** — pièces avec seuils, prix unitaire et MOQ ; fiche détaillée au clic (référence, fournisseur, sous-ensembles qui l'utilisent) ; modale *Gérer les sous-ensembles*
 - **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection ; modale *Gérer stocks JLC*
-- **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant
+- **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant, factures fournisseurs à payer
 - **Historique** — une ligne par vente ou par achat, avec montants perçus et dépensés
 
 ### Décompte du stock
@@ -71,6 +71,21 @@ Reprise du fichier *JLC Stock Manager*, accessible depuis Achats MP → *Gérer 
   Sourcing), manque = stock actuel − stock cible. Une référence absente de l'inventaire compte pour 0.
 - Le **dernier import** est enregistré dans `parametres` et réaffiché à l'ouverture.
 - Tableau des manques : référence, qté / produit, stock actuel, stock cible, manque (négatif, en rouge).
+
+### Factures fournisseurs
+Section repliée par défaut dans Projections, entre le graphe de trésorerie et les recettes.
+Saisie et suivi des factures à payer (fournisseur, libellé, montant TTC, échéance), marquage
+payée / non payée, total dû. Une pastille sur l'en-tête compte les factures dont l'échéance
+est dépassée (rouge) ou à moins de 7 jours (orange) ; sans échéance proche, aucun signal.
+Suivi informatif : ces montants ne sont pas reportés dans le plan de trésorerie, qui calcule
+déjà les achats projetés.
+
+### Numéros de série
+Une expédition porte autant de numéros que de bouées complètes dans son contenu
+(`expeditions.numeros_serie`, `src/utils/numerosSerie.ts`). Les champs s'ouvrent d'office à la
+finalisation et en modification d'une expédition déjà numérotée, pré-remplis avec les prochains
+numéros libres ; sur une commande encore à expédier ils restent vides. `numero_serie` garde le
+premier numéro, pour les lignes anciennes et les filtres.
 
 ### Anciennes pages supprimées
 Les pages *Nomenclature* et *Fabrication* ont été supprimées ; la nomenclature se gère
@@ -103,7 +118,8 @@ Base gérée via Supabase. Tables :
 | `productions` | Historique des fabrications (plus alimentée) |
 | `utilisateurs` | Membres de l'équipe et rôles |
 | `clients` | Fiches clients |
-| `expeditions` | Ventes et expéditions (même enregistrement) ; `items` = produits sortis, `facture_emise` |
+| `expeditions` | Ventes et expéditions (même enregistrement) ; `items` = produits sortis, `facture_emise`, `numeros_serie` |
+| `factures_fournisseurs` | Factures fournisseurs à payer (`date_paiement` à NULL = encore due) |
 | `commandes` | Achats de matières premières |
 | `alertes_manuelles` | Alertes créées depuis le tableau de bord |
 | `parametres` | Table singleton : objectif de vente, prix de vente moyen, trésorerie initiale, sous-ensemble « bouée complète », mois de départ des projections, paramètre et dernier inventaire JLC |
@@ -125,6 +141,8 @@ l'éditeur SQL de Supabase. Les plus récents sont rejouables sans risque
 - `add-origines-multiples.sql` — plusieurs origines par vente, et CA TTC réalisé
 - `add-produits-facture-fournisseur.sql` — référence et fournisseur des pièces, facture émise, produits vendables sur les sous-ensembles
 - `add-jlc-stock.sql` — table `jlc_bom` (BOM initiale de 68 références), paramètre et dernier inventaire JLC
+- `add-factures-fournisseurs.sql` — table `factures_fournisseurs`
+- `add-numeros-serie.sql` — plusieurs numéros de série par expédition
 
 ## 🔐 Configuration
 

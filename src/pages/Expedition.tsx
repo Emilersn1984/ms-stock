@@ -12,6 +12,7 @@ import ModalExpedition from '../components/ModalExpedition'
 import ModalClients from '../components/ModalClients'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { retournerContenu } from '../utils/consommerExpedition'
+import { numerosSerieExpedition } from '../utils/numerosSerie'
 import { Expedition, CategorieExpedition, Transporteur, Langue } from '../types'
 
 function SectionLabel({ texte, accent, count }: { texte: string; accent?: string; count?: number | string }) {
@@ -146,9 +147,9 @@ function CarteEnvoyee({
           </span>
           {expedition.version_code && <span className="text-primary-400">{expedition.version_code}</span>}
           {expedition.langue && <span>{drapeauLangue(expedition.langue)}</span>}
-          {expedition.numero_serie && (
-            <span className="font-bold text-primary-700">{expedition.numero_serie}</span>
-          )}
+          {numerosSerieExpedition(expedition).map((numero) => (
+            <span key={numero} className="font-bold text-primary-700">{numero}</span>
+          ))}
         </div>
         {(urlSuivi || onReceptionner) && (
           <div className="flex items-center gap-2 mt-2">
@@ -287,6 +288,23 @@ export default function ExpeditionPage() {
       return true
     })
   }, [historique, filtreClient, filtreTransporteur, filtreVersion, filtreLangue, filtreCategorie, filtreDateDebut, filtreDateFin])
+
+  // Une ligne par numéro de série : un colis de trois bouées occupe trois lignes.
+  const lignesHistorique = useMemo(() => {
+    type LigneHistorique = { e: Expedition; numeroSerie: string | null; premiere: boolean; cle: string }
+    const lignes: LigneHistorique[] = []
+    for (const e of historiqueFiltre) {
+      const numeros = numerosSerieExpedition(e)
+      if (numeros.length === 0) {
+        lignes.push({ e, numeroSerie: null, premiere: true, cle: e.id })
+        continue
+      }
+      numeros.forEach((numeroSerie, i) => {
+        lignes.push({ e, numeroSerie, premiere: i === 0, cle: `${e.id}-${i}` })
+      })
+    }
+    return lignes
+  }, [historiqueFiltre])
 
   const hasFiltresActifs =
     !!filtreClient || !!filtreTransporteur || !!filtreVersion || !!filtreLangue || !!filtreCategorie || !!filtreDateDebut || !!filtreDateFin
@@ -545,8 +563,8 @@ export default function ExpeditionPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-primary-50">
-                    {historiqueFiltre.map((e) => (
-                      <tr key={e.id} className="hover:bg-primary-50 transition-colors">
+                    {lignesHistorique.map(({ e, numeroSerie, premiere, cle }) => (
+                      <tr key={cle} className="hover:bg-primary-50 transition-colors">
                         <td className="px-4 py-3 text-xs text-primary-500 whitespace-nowrap">
                           {e.date_reception ? new Date(e.date_reception).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                         </td>
@@ -559,7 +577,7 @@ export default function ExpeditionPage() {
                         <td className="px-4 py-3 text-xs text-primary-600">{e.version_code ?? '—'}</td>
                         <td className="px-4 py-3 text-xs">{e.langue ? drapeauLangue(e.langue) : '—'}</td>
                         <td className="px-4 py-3 text-xs text-primary-600 capitalize">{e.transporteur ?? '—'}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-primary-700 tabular-nums">{e.numero_serie ?? '—'}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-primary-700 tabular-nums">{numeroSerie ?? '—'}</td>
                         <td className="px-4 py-3 text-xs">
                           {e.origine === 'stripe' ? (
                             <span className="flex items-center gap-1 text-primary-600"><ShoppingBag size={11} /> Stripe</span>
@@ -568,19 +586,22 @@ export default function ExpeditionPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1">
-                            <ActionIcon
-                              icon={<Undo2 size={12} />}
-                              title="Annuler la réception (revient dans « Envoyé »)"
-                              onClick={() => annulerReception(e)}
-                            />
-                            <ActionIcon
-                              icon={<Trash2 size={12} />}
-                              title="Supprimer"
-                              onClick={() => setExpeditionASupprimer(e)}
-                              className="hover:!bg-danger-100 hover:!text-danger-600"
-                            />
-                          </div>
+                          {/* Les actions portent sur toute l'expédition : une seule fois par colis. */}
+                          {premiere && (
+                            <div className="flex justify-end gap-1">
+                              <ActionIcon
+                                icon={<Undo2 size={12} />}
+                                title="Annuler la réception (revient dans « Envoyé »)"
+                                onClick={() => annulerReception(e)}
+                              />
+                              <ActionIcon
+                                icon={<Trash2 size={12} />}
+                                title="Supprimer"
+                                onClick={() => setExpeditionASupprimer(e)}
+                                className="hover:!bg-danger-100 hover:!text-danger-600"
+                              />
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
