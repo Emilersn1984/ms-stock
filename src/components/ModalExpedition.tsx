@@ -81,10 +81,6 @@ export default function ModalExpedition({
   const [transporteur, setTransporteur] = useState<Transporteur | ''>(expedition?.transporteur ?? '')
   const [numeroSuivi, setNumeroSuivi] = useState(expedition?.numero_suivi ?? '')
 
-  const [rechercheSav, setRechercheSav] = useState('')
-  const [dropdownSavOuvert, setDropdownSavOuvert] = useState(false)
-  const savDropdownRef = useRef<HTMLDivElement>(null)
-
   // Produits sortis de l'atelier. Une vente saisie avant l'apparition de ce
   // choix arrive sans contenu : on propose une bouée complète par défaut.
   const [items, setItems] = useState<ExpeditionItem[]>(() => {
@@ -153,9 +149,6 @@ export default function ModalExpedition({
       if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
         setDropdownClientOuvert(false)
       }
-      if (savDropdownRef.current && !savDropdownRef.current.contains(e.target as Node)) {
-        setDropdownSavOuvert(false)
-      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -168,31 +161,6 @@ export default function ModalExpedition({
   }, [clients, rechercheClient])
 
 
-  // Recherche SAV : par client déjà renseigné, ou par numéro de série d'un colis déjà expédié
-  const resultatsSav = useMemo(() => {
-    if (!rechercheSav.trim()) return []
-    const q = rechercheSav.toLowerCase()
-    const parClient = clients
-      .filter((c) => `${c.prenom} ${c.nom}`.toLowerCase().includes(q))
-      .map((c) => ({
-        type: 'client' as const,
-        client: c as Client | null,
-        numeroSerie: null as string | null,
-        nomDest: undefined as string | undefined,
-        prenomDest: undefined as string | undefined,
-      }))
-    const parSerie = expeditionsExistantes
-      .flatMap((e) => numerosSerieExpedition(e).filter((n) => n.toLowerCase().includes(q)).map((n) => ({ e, n })))
-      .map(({ e, n }) => ({
-        type: 'serie' as const,
-        client: (e.clients ? clients.find((c) => c.id === e.clients!.id) ?? null : null) as Client | null,
-        numeroSerie: n as string | null,
-        nomDest: e.nom_destinataire as string | undefined,
-        prenomDest: e.prenom_destinataire as string | undefined,
-      }))
-    return [...parClient, ...parSerie].slice(0, 8)
-  }, [rechercheSav, clients, expeditionsExistantes])
-
   function selectionnerClient(c: Client) {
     setClientIdSelectionne(c.id)
     setNom(c.nom)
@@ -202,20 +170,6 @@ export default function ModalExpedition({
     setPays(c.pays ?? '')
     setRechercheClient(`${c.prenom} ${c.nom}`)
     setDropdownClientOuvert(false)
-  }
-
-
-  function selectionnerResultatSav(r: { client: Client | null; numeroSerie: string | null; nomDest?: string; prenomDest?: string }) {
-    if (r.client) {
-      selectionnerClient(r.client)
-    } else {
-      setNom(r.nomDest ?? '')
-      setPrenom(r.prenomDest ?? '')
-    }
-    if (r.numeroSerie) {
-      setRechercheSav(`${r.numeroSerie}`)
-    }
-    setDropdownSavOuvert(false)
   }
 
   const categorieEffective: CategorieExpedition | null = expedition?.categorie ?? (categorie || null)
@@ -561,49 +515,6 @@ export default function ModalExpedition({
               )}
             </div>
           </div>
-
-          {/* Recherche SAV — uniquement à la création/modification, pas à la finalisation */}
-          {!verrouilleALaFinalisation && categorie === 'sav' && (
-            <div ref={savDropdownRef} className="relative">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-primary-600 mb-1.5">
-                Client / colis d'origine (SAV)
-              </label>
-              <div className="relative">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={rechercheSav}
-                  onChange={(e) => { setRechercheSav(e.target.value); setDropdownSavOuvert(true) }}
-                  onFocus={() => setDropdownSavOuvert(true)}
-                  placeholder="Nom du client ou n° de série…"
-                  className="w-full pl-9 pr-4 py-2.5 border border-primary-200 rounded-xl text-sm text-primary-900 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-                  autoComplete="off"
-                />
-              </div>
-              {dropdownSavOuvert && resultatsSav.length > 0 && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                  {resultatsSav.map((r, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => selectionnerResultatSav(r)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 transition-colors text-left"
-                    >
-                      <span className="flex-1 text-sm font-medium text-primary-900">
-                        {r.client ? `${r.client.prenom} ${r.client.nom}` : `${r.prenomDest ?? ''} ${r.nomDest ?? ''}`}
-                      </span>
-                      {r.numeroSerie && (
-                        <span className="text-xs text-primary-400 tabular-nums flex-shrink-0">{r.numeroSerie}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-primary-400 mt-1">
-                Sélectionnez un client/n° de série existant, ou renseignez simplement un nouveau client et un n° de suivi ci-dessous.
-              </p>
-            </div>
-          )}
 
           {/* Produits sortis de l'atelier : leurs composants sont décomptés à la validation */}
           <div className="bg-primary-50/80 border border-primary-100 rounded-2xl p-3.5">

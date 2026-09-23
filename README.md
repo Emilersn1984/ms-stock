@@ -45,8 +45,9 @@ L'application est alors accessible sur `http://localhost:5173`
 
 ### Pages (dans l'ordre du menu)
 - **Tableau de bord** — CA du mois, commandes du mois, colis fabricables, alertes, achats recommandés, objectif de vente mensuel
-- **Ventes** — saisie d'une vente (client, type Vente / SAV / Don, contenu, facture émise, origines multiples, commentaire, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine, commentaire et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
+- **Ventes** — saisie d'une vente (client, type Vente / Don, contenu, facture émise, origines multiples, commentaire, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine, commentaire et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
 - **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, un n° de série par bouée proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable avec une ligne par n° de série
+- **SAV** — bandeau de compteurs (produits vendus et SAV, au total et sur l'année), déclaration d'une reprise sur un client existant, liste des reprises
 - **Stock** — pièces avec seuils, prix unitaire et MOQ ; fiche détaillée au clic (référence, fournisseur, sous-ensembles qui l'utilisent) ; modale *Gérer les sous-ensembles*
 - **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection ; modale *Gérer stocks JLC*
 - **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant, factures fournisseurs à payer
@@ -87,6 +88,29 @@ finalisation et en modification d'une expédition déjà numérotée, pré-rempl
 numéros libres ; sur une commande encore à expédier ils restent vides. `numero_serie` garde le
 premier numéro, pour les lignes anciennes et les filtres.
 
+### SAV
+Page dédiée (table `sav`). Une reprise se déclare sur un **client existant** : date, cause
+(électronique / mécanique), description, remboursement demandé, moyen de récupération du matériel
+(mains propres ou envoi, avec transporteur et n° de suivi), matériel concerné et date prévue de
+renvoi au client.
+
+- Le matériel repris **n'est jamais remis en stock** : rien ne garantit qu'il soit réutilisable.
+- Avec une date de renvoi, un colis est créé dans `expeditions` (catégorie SAV, statut « à
+  expédier », date d'envoi prévisionnelle = date de renvoi) et rattaché par `sav.expedition_id`
+  (`src/utils/expeditionSav.ts`). Sans date, aucun colis n'est créé. Un colis **déjà parti** n'est
+  plus retouché : son contenu a été décompté du stock. Supprimer un SAV retire le colis s'il est
+  encore à expédier.
+- Le renvoi suit ensuite le circuit normal : les composants sont décomptés au passage
+  « à expédier » → « expédié ». Si le matériel réparé repart tel quel, vider le contenu du colis
+  avant de le valider, sinon les composants seront décomptés une seconde fois.
+- Compteurs (`src/utils/statsSav.ts`) : les produits vendus comptent les produits, pas les
+  commandes (une vente de 2 bouées compte 2), sur les expéditions de catégorie « vente » ; une
+  vente sans contenu (saisie avant le choix des produits) compte pour 1. Un SAV
+  compte pour 1. Les expéditions SAV antérieures au module sont comptées, sauf celles déjà
+  rattachées à une reprise.
+- La déclaration d'un SAV depuis la page Ventes a été retirée ; la catégorie SAV reste affichée
+  et filtrable pour les lignes existantes et les colis de renvoi.
+
 ### Anciennes pages supprimées
 Les pages *Nomenclature* et *Fabrication* ont été supprimées ; la nomenclature se gère
 depuis la page Stock. Les routes `/nomenclature` et `/fabrication` redirigent vers `/stock`.
@@ -120,6 +144,7 @@ Base gérée via Supabase. Tables :
 | `clients` | Fiches clients |
 | `expeditions` | Ventes et expéditions (même enregistrement) ; `items` = produits sortis, `facture_emise`, `numeros_serie` |
 | `factures_fournisseurs` | Factures fournisseurs à payer (`date_paiement` à NULL = encore due) |
+| `sav` | Reprises de SAV ; `materiel` = matériel repris, `expedition_id` = colis de renvoi |
 | `commandes` | Achats de matières premières |
 | `alertes_manuelles` | Alertes créées depuis le tableau de bord |
 | `parametres` | Table singleton : objectif de vente, prix de vente moyen, trésorerie initiale, sous-ensemble « bouée complète », mois de départ des projections, paramètre et dernier inventaire JLC |
@@ -143,6 +168,7 @@ l'éditeur SQL de Supabase. Les plus récents sont rejouables sans risque
 - `add-jlc-stock.sql` — table `jlc_bom` (BOM initiale de 68 références), paramètre et dernier inventaire JLC
 - `add-factures-fournisseurs.sql` — table `factures_fournisseurs`
 - `add-numeros-serie.sql` — plusieurs numéros de série par expédition
+- `add-sav.sql` — table `sav` (reprises de SAV et colis de renvoi rattaché)
 
 ## 🔐 Configuration
 

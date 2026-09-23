@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
 import { useUtilisateur } from '../hooks/useUtilisateur'
 import Header from '../components/Header'
-import { Home, Package, Truck, ScrollText, Send, ShoppingBag, LineChart } from 'lucide-react'
+import { Home, Package, Truck, ScrollText, Send, ShoppingBag, LineChart, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 type NavItem = {
@@ -15,13 +15,14 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Tableau de bord', icon: Home },
   { to: '/ventes', label: 'Ventes', icon: ShoppingBag },
   { to: '/expedition', label: 'Expédition', icon: Send },
+  { to: '/sav', label: 'SAV', icon: Wrench },
   { to: '/stock', label: 'Stock', icon: Package },
   { to: '/commandes', label: 'Achats MP', icon: Truck },
   { to: '/projections', label: 'Projections', icon: LineChart },
   { to: '/historique', label: 'Historique', icon: ScrollText },
 ]
 
-const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/ventes', '/expedition', '/historique', '/projections']
+const NAV_ITEMS_MASQUES_OUVRIER = ['/commandes', '/ventes', '/expedition', '/sav', '/historique', '/projections']
 
 export default function Layout() {
   const { utilisateur, deconnecter } = useUtilisateur()
@@ -75,19 +76,24 @@ export default function Layout() {
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-primary-100 z-10">
-        <div className={`grid h-16 grid-cols-${navItems.length}`}>
+        {/* Colonnes posées en style inline : Tailwind ne peut pas générer une
+            classe grid-cols-N construite à l'exécution. */}
+        <div
+          className="grid h-16"
+          style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+        >
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+                `flex flex-col items-center justify-center gap-0.5 min-w-0 text-[10px] font-medium transition-colors ${
                   isActive ? 'text-primary-600' : 'text-primary-400'
                 }`
               }
             >
               <item.icon size={20} />
-              <span className="leading-tight truncate px-1 text-center">{item.label.split(' ')[0]}</span>
+              <span className="leading-tight truncate w-full px-0.5 text-center">{item.label.split(' ')[0]}</span>
             </NavLink>
           ))}
         </div>

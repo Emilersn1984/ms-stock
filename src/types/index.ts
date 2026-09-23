@@ -189,6 +189,30 @@ export type FactureFournisseur = {
   created_at: string
 }
 
+export type CauseSav = 'electronique' | 'mecanique'
+
+export type ModeRecuperation = 'mains_propres' | 'envoi'
+
+// Reprise de SAV chez un client existant. Le matériel repris n'impacte aucun
+// stock ; expedition_id pointe le colis de renvoi créé dans expeditions.
+export type Sav = {
+  id: string
+  client_id: string | null
+  nom_client: string
+  prenom_client: string
+  date_sav: string
+  cause: CauseSav
+  description: string | null
+  remboursement_demande: boolean
+  mode_recuperation: ModeRecuperation
+  materiel: ExpeditionItem[]
+  transporteur: Transporteur | null
+  numero_suivi: string | null
+  date_renvoi_prevue: string | null
+  expedition_id: string | null
+  created_at: string
+}
+
 export type SectionProjection = 'recettes' | 'depenses'
 
 // Une ligne du plan de trésorerie sur 3 mois. Un montant à NULL sur une ligne

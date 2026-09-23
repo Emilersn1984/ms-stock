@@ -18,8 +18,9 @@ export const CATEGORIE_BADGE: Record<CategorieExpedition, string> = {
 
 // Types proposés à la saisie d'une nouvelle vente. « Démo » et « Autre »
 // restent acceptés en base pour les lignes historiques, mais ne sont plus
-// proposés à la création.
-export const CATEGORIES_VENTE: CategorieExpedition[] = ['vente', 'sav', 'don']
+// proposés à la création. « SAV » non plus : les reprises se déclarent
+// désormais depuis la page SAV, qui crée elle-même le colis de renvoi.
+export const CATEGORIES_VENTE: CategorieExpedition[] = ['vente', 'don']
 
 // Toutes les valeurs possibles, pour les listes de filtres.
 export const CATEGORIES_TOUTES: CategorieExpedition[] = ['vente', 'sav', 'don', 'demo', 'autre']

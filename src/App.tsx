@@ -6,6 +6,7 @@ import Stock from './pages/Stock'
 import Commandes from './pages/Commandes'
 import ExpeditionPage from './pages/Expedition'
 import Ventes from './pages/Ventes'
+import SavPage from './pages/Sav'
 import Projections from './pages/Projections'
 import Historique from './pages/Historique'
 import RouteProtegee from './components/RouteProtegee'
@@ -30,6 +31,10 @@ function App() {
           <Route
             path="/expedition"
             element={<RouteProtegee rolesInterdits={['ouvrier']}><ExpeditionPage /></RouteProtegee>}
+          />
+          <Route
+            path="/sav"
+            element={<RouteProtegee rolesInterdits={['ouvrier']}><SavPage /></RouteProtegee>}
           />
           <Route path="/fabrication" element={<Navigate to="/stock" replace />} />
           <Route path="/nomenclature" element={<Navigate to="/stock" replace />} />
