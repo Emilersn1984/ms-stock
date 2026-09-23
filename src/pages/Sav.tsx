@@ -111,11 +111,11 @@ export default function SavPage() {
       formatDate(s.date_sav),
       s.prenom_client,
       s.nom_client,
-      CAUSE_LABEL[s.cause],
+      s.cause ? CAUSE_LABEL[s.cause] : '',
       s.description ?? '',
       resumeContenu(s.materiel, sousEnsembles),
       s.remboursement_demande ? 'Oui' : 'Non',
-      MODE_LABEL[s.mode_recuperation],
+      s.mode_recuperation ? MODE_LABEL[s.mode_recuperation] : '',
       s.mode_recuperation === 'envoi' ? labelTransporteur(s.transporteur) : '',
       s.numero_suivi ?? '',
       s.date_renvoi_prevue ? formatDate(s.date_renvoi_prevue) : '',
@@ -344,11 +344,15 @@ export default function SavPage() {
                       <td className="py-2.5 pr-3 text-primary-600 whitespace-nowrap">{formatDate(s.date_sav)}</td>
                       <td className="py-2.5 pr-3 font-medium text-primary-900">{s.prenom_client} {s.nom_client}</td>
                       <td className="py-2.5 pr-3">
-                        <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg whitespace-nowrap ${
-                          s.cause === 'electronique' ? 'bg-alert-100 text-alert-600' : 'bg-primary-100 text-primary-600'
-                        }`}>
-                          {CAUSE_LABEL[s.cause]}
-                        </span>
+                        {s.cause ? (
+                          <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg whitespace-nowrap ${
+                            s.cause === 'electronique' ? 'bg-alert-100 text-alert-600' : 'bg-primary-100 text-primary-600'
+                          }`}>
+                            {CAUSE_LABEL[s.cause]}
+                          </span>
+                        ) : (
+                          <span className="text-primary-300">À compléter</span>
+                        )}
                       </td>
                       <td className="py-2.5 pr-3 text-primary-700">{resumeContenu(s.materiel, sousEnsembles) || '—'}</td>
                       <td className="py-2.5 pr-3 text-primary-600">{s.remboursement_demande ? 'Oui' : 'Non'}</td>
@@ -361,11 +365,13 @@ export default function SavPage() {
                               {s.numero_suivi ? ` · ${s.numero_suivi}` : ''}
                             </span>
                           </span>
-                        ) : (
+                        ) : s.mode_recuperation === 'mains_propres' ? (
                           <span className="flex items-center gap-1.5">
                             <Handshake size={13} className="text-primary-400 flex-shrink-0" />
                             {MODE_LABEL.mains_propres}
                           </span>
+                        ) : (
+                          <span className="text-primary-300">À compléter</span>
                         )}
                       </td>
                       <td className="py-2.5 pr-3 text-primary-600 whitespace-nowrap">{formatDate(s.date_renvoi_prevue)}</td>

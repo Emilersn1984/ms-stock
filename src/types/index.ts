@@ -201,10 +201,12 @@ export type Sav = {
   nom_client: string
   prenom_client: string
   date_sav: string
-  cause: CauseSav
+  // Vides sur les SAV importés depuis les anciennes expéditions : l'information
+  // n'existait pas. Toute modification depuis l'historique les rend obligatoires.
+  cause: CauseSav | null
   description: string | null
   remboursement_demande: boolean
-  mode_recuperation: ModeRecuperation
+  mode_recuperation: ModeRecuperation | null
   materiel: ExpeditionItem[]
   transporteur: Transporteur | null
   numero_suivi: string | null

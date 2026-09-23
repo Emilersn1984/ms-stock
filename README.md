@@ -110,6 +110,10 @@ renvoi au client.
   rattachées à une reprise.
 - La déclaration d'un SAV depuis la page Ventes a été retirée ; la catégorie SAV reste affichée
   et filtrable pour les lignes existantes et les colis de renvoi.
+- Les SAV saisis avant la page SAV ont été repris par `add-sav-import.sql`, rattachés à leur
+  colis. Leur **cause** et leur **moyen de récupération** sont vides (l'information n'existait
+  pas) et s'affichent « À compléter » : ces deux colonnes acceptent donc NULL, mais le formulaire
+  les exige dès qu'on modifie une ligne.
 
 ### Anciennes pages supprimées
 Les pages *Nomenclature* et *Fabrication* ont été supprimées ; la nomenclature se gère
@@ -169,6 +173,7 @@ l'éditeur SQL de Supabase. Les plus récents sont rejouables sans risque
 - `add-factures-fournisseurs.sql` — table `factures_fournisseurs`
 - `add-numeros-serie.sql` — plusieurs numéros de série par expédition
 - `add-sav.sql` — table `sav` (reprises de SAV et colis de renvoi rattaché)
+- `add-sav-import.sql` — reprise des SAV saisis avant la page SAV (cause et récupération nullables)
 
 ## 🔐 Configuration
 
