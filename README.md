@@ -47,7 +47,7 @@ L'application est alors accessible sur `http://localhost:5173`
 - **Tableau de bord** — CA du mois, commandes du mois, colis fabricables, alertes, achats recommandés, objectif de vente mensuel
 - **Ventes** — saisie d'une vente (client, type Vente / Don, contenu, facture émise, origines multiples, commentaire, montant HT, type de bateau, date d'expédition prévue), historique filtrable, export CSV complet (adresse, origine, commentaire et type de bateau n'y figurent que dans l'export), total sous le tableau, graphe de CA mensuel
 - **Expédition** — colis à expédier, finalisation (adresse modifiable, contenu, transporteur, un n° de série par bouée proposé automatiquement), retour vers « à expédier », annulation d'une réception, historique filtrable avec une ligne par n° de série
-- **SAV** — bandeau de compteurs (produits vendus et SAV, au total et sur l'année), déclaration d'une reprise sur un client existant, liste des reprises
+- **SAV** — bandeau de compteurs (produits vendus et SAV, au total et sur l'année), déclaration d'une reprise sur un client existant, historique filtrable (client, cause, récupération, remboursement, période) et export CSV
 - **Stock** — pièces avec seuils, prix unitaire et MOQ ; fiche détaillée au clic (référence, fournisseur, sous-ensembles qui l'utilisent) ; modale *Gérer les sous-ensembles*
 - **Achats MP** — achats recommandés, commandes en cours, commande multi-références, historique des commandes passées, graphe des dépenses avec projection ; modale *Gérer stocks JLC*
 - **Projections** — plan de trésorerie sur 3 mois, lignes et cellules modifiables, graphe de trésorerie, bascule manuelle au mois suivant, factures fournisseurs à payer
