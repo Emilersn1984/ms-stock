@@ -95,10 +95,10 @@ Page dédiée (table `sav`). Une reprise se déclare sur un **client existant** 
 renvoi au client.
 
 - La recherche client fusionne les fiches `clients` et les destinataires des ventes
-  (`src/utils/clientsConnus.ts`). L'import initial de l'historique n'a pas créé de fiche pour
-  62 ventes : sans cette fusion, plus de la moitié des clients seraient introuvables. Le
-  rapprochement ignore casse, accents et espaces ; une fiche client prime sur une ligne de vente,
-  et un client sans fiche donne un SAV à `client_id` NULL, ce que la base accepte.
+  (`src/utils/clientsConnus.ts`). Le rapprochement ignore casse, accents et espaces ; une fiche
+  client prime sur une ligne de vente, et un client sans fiche donne un SAV à `client_id` NULL,
+  ce que la base accepte. Ce filet reste utile pour toute vente qui arriverait sans fiche
+  (import, Stripe).
 - Le matériel repris **n'est jamais remis en stock** : rien ne garantit qu'il soit réutilisable.
 - Avec une date de renvoi, un colis est créé dans `expeditions` (catégorie SAV, statut « à
   expédier », date d'envoi prévisionnelle = date de renvoi) et rattaché par `sav.expedition_id`
@@ -141,6 +141,12 @@ src/
 ## 📊 Base de données
 
 Base gérée via Supabase. Tables :
+
+> **Reprise du 25/09/2026.** L'import initial de l'historique, le 03/09, avait créé 62 ventes
+> sans fiche client. 59 fiches ont été créées depuis la vente la plus récente de chaque client
+> (nom, prénom, langue, adresse, ville, code postal, pays), et les 62 ventes ont été rattachées.
+> Il ne reste aucune vente sans `client_id`. Opération faite une fois, directement en base ;
+> rien à rejouer.
 
 | Table | Rôle |
 |---|---|
