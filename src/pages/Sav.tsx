@@ -8,6 +8,7 @@ import { getUtilisateurStored } from '../hooks/useUtilisateur'
 import { resumeContenu } from '../utils/produitsAtelier'
 import { calculerStatsSav } from '../utils/statsSav'
 import { supprimerRenvoiSav } from '../utils/expeditionSav'
+import { clientsConnus } from '../utils/clientsConnus'
 import { TRANSPORTEURS } from '../utils/trackingUrl'
 import ModalSav from '../components/ModalSav'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -134,6 +135,13 @@ export default function SavPage() {
     lien.click()
     URL.revokeObjectURL(url)
   }
+
+  // Plus de la moitié des ventes importées n'ont pas de fiche client : la
+  // recherche doit aussi proposer les destinataires connus par leurs ventes.
+  const clientsProposes = useMemo(
+    () => clientsConnus(clients, expeditions),
+    [clients, expeditions]
+  )
 
   const annee = new Date().getFullYear()
   const stats = useMemo(
@@ -406,7 +414,7 @@ export default function SavPage() {
         <ModalSav
           mode={modalOuvert}
           sav={savEnEdition}
-          clients={clients}
+          clients={clientsProposes}
           sousEnsembles={sousEnsembles}
           utilisateur={utilisateur}
           onClose={() => { setModalOuvert(null); setSavEnEdition(null) }}

@@ -1,10 +1,11 @@
 import { supabase } from '../lib/supabase'
-import { Client, ExpeditionItem } from '../types'
+import { ExpeditionItem } from '../types'
+import { ClientConnu } from './clientsConnus'
 
 type ParamsRenvoi = {
   // Colis de renvoi déjà créé pour ce SAV, s'il existe.
   expeditionId: string | null
-  client: Client | null
+  client: ClientConnu | null
   nomClient: string
   prenomClient: string
   dateSav: string
@@ -40,7 +41,7 @@ export async function synchroniserRenvoiSav(p: ParamsRenvoi): Promise<string | n
   }
 
   const champs = {
-    client_id: p.client?.id ?? null,
+    client_id: p.client?.clientId ?? null,
     nom_destinataire: p.nomClient,
     prenom_destinataire: p.prenomClient,
     langue: p.client?.langue ?? null,

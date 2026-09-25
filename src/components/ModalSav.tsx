@@ -4,15 +4,18 @@ import { supabase } from '../lib/supabase'
 import { TRANSPORTEURS } from '../utils/trackingUrl'
 import { synchroniserRenvoiSav } from '../utils/expeditionSav'
 import SelecteurProduits from './SelecteurProduits'
+import { ClientConnu } from '../utils/clientsConnus'
 import {
-  Client, ExpeditionItem, Sav, SousEnsemble, Transporteur, Utilisateur,
+  ExpeditionItem, Sav, SousEnsemble, Transporteur, Utilisateur,
   CauseSav, ModeRecuperation,
 } from '../types'
 
 type Props = {
   mode: 'creer' | 'modifier'
   sav?: Sav | null
-  clients: Client[]
+  // Fiches clients et destinataires des ventes confondus : un client connu
+  // seulement par ses ventes doit rester sélectionnable.
+  clients: ClientConnu[]
   sousEnsembles: SousEnsemble[]
   utilisateur: Utilisateur
   onClose: () => void
@@ -35,7 +38,7 @@ function aujourdhui(): string {
 
 /** Déclaration d'une reprise de SAV sur un client existant. */
 export default function ModalSav({ mode, sav, clients, sousEnsembles, utilisateur, onClose, onSaved }: Props) {
-  const [clientId, setClientId] = useState<string | null>(sav?.client_id ?? null)
+  const [client, setClient] = useState<ClientConnu | null>(null)
   const [rechercheClient, setRechercheClient] = useState(
     sav ? `${sav.prenom_client} ${sav.nom_client}` : ''
   )
@@ -69,10 +72,19 @@ export default function ModalSav({ mode, sav, clients, sousEnsembles, utilisateu
     return clients.filter((c) => `${c.prenom} ${c.nom}`.toLowerCase().includes(q)).slice(0, 8)
   }, [clients, rechercheClient])
 
-  const client = useMemo(() => clients.find((c) => c.id === clientId) ?? null, [clients, clientId])
+  // Modification : on retrouve le client par sa fiche, sinon par son nom, pour
+  // les SAV rattachés à un client qui n'a jamais eu de fiche.
+  useEffect(() => {
+    if (!sav) return
+    const attendu = `${sav.prenom_client} ${sav.nom_client}`.toLowerCase()
+    const trouve = clients.find((c) =>
+      sav.client_id ? c.clientId === sav.client_id : `${c.prenom} ${c.nom}`.toLowerCase() === attendu
+    )
+    if (trouve) setClient(trouve)
+  }, [sav, clients])
 
-  function selectionnerClient(c: Client) {
-    setClientId(c.id)
+  function selectionnerClient(c: ClientConnu) {
+    setClient(c)
     setRechercheClient(`${c.prenom} ${c.nom}`)
     setDropdownOuvert(false)
   }
@@ -88,7 +100,7 @@ export default function ModalSav({ mode, sav, clients, sousEnsembles, utilisateu
     setErreur(null)
     try {
       const champs = {
-        client_id: client.id,
+        client_id: client.clientId,
         nom_client: client.nom,
         prenom_client: client.prenom,
         date_sav: dateSav,
@@ -184,7 +196,7 @@ export default function ModalSav({ mode, sav, clients, sousEnsembles, utilisateu
               <input
                 type="text"
                 value={rechercheClient}
-                onChange={(e) => { setRechercheClient(e.target.value); setDropdownOuvert(true); setClientId(null) }}
+                onChange={(e) => { setRechercheClient(e.target.value); setDropdownOuvert(true); setClient(null) }}
                 onFocus={() => setDropdownOuvert(true)}
                 placeholder="Rechercher un client existant…"
                 className={`${inputClass} pl-9`}
@@ -195,7 +207,7 @@ export default function ModalSav({ mode, sav, clients, sousEnsembles, utilisateu
               <div className="absolute z-20 w-full mt-1 bg-white border border-primary-100 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                 {clientsFiltres.map((c) => (
                   <button
-                    key={c.id}
+                    key={c.clientId ?? `${c.prenom} ${c.nom}`}
                     type="button"
                     onClick={() => selectionnerClient(c)}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary-50 transition-colors text-left"

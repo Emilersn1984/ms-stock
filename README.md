@@ -94,6 +94,11 @@ Page dédiée (table `sav`). Une reprise se déclare sur un **client existant** 
 (mains propres ou envoi, avec transporteur et n° de suivi), matériel concerné et date prévue de
 renvoi au client.
 
+- La recherche client fusionne les fiches `clients` et les destinataires des ventes
+  (`src/utils/clientsConnus.ts`). L'import initial de l'historique n'a pas créé de fiche pour
+  62 ventes : sans cette fusion, plus de la moitié des clients seraient introuvables. Le
+  rapprochement ignore casse, accents et espaces ; une fiche client prime sur une ligne de vente,
+  et un client sans fiche donne un SAV à `client_id` NULL, ce que la base accepte.
 - Le matériel repris **n'est jamais remis en stock** : rien ne garantit qu'il soit réutilisable.
 - Avec une date de renvoi, un colis est créé dans `expeditions` (catégorie SAV, statut « à
   expédier », date d'envoi prévisionnelle = date de renvoi) et rattaché par `sav.expedition_id`
