@@ -7,7 +7,10 @@ import { FactureFournisseur } from '../types'
 // Une échéance dans les 7 jours (ou déjà passée) déclenche la pastille d'alerte.
 const SEUIL_ALERTE_JOURS = 7
 
-const CHAMP = 'w-full bg-transparent text-xs text-primary-800 px-1 py-1 rounded hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+// Largeur séparée du reste : un `w-32` posé à côté de `w-full` ne gagne pas,
+// l'ordre dans la feuille Tailwind prime sur l'ordre des classes.
+const CHAMP_BASE = 'bg-transparent text-xs text-primary-800 px-1 py-1 rounded hover:bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+const CHAMP = `w-full ${CHAMP_BASE}`
 
 function formatEuros(v: number): string {
   return v.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €'
@@ -185,12 +188,14 @@ export default function SectionFacturesFournisseurs() {
             <p className="text-xs text-primary-400 italic">Aucune facture à payer.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm table-fixed">
+              {/* min-w : en table-fixed, sous cette largeur les colonnes se
+                  chevauchent au lieu de rétrécir. Le conteneur défile. */}
+              <table className="w-full min-w-[720px] text-sm table-fixed">
                 <thead>
                   <tr className="border-b border-primary-100">
                     <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-2 py-1.5 w-40">Fournisseur</th>
                     <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-2 py-1.5">Libellé</th>
-                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-2 py-1.5 w-52">Échéance</th>
+                    <th className="text-left text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-2 py-1.5 w-64">Échéance</th>
                     <th className="text-right text-[10px] font-bold text-primary-600 uppercase tracking-[0.15em] px-2 py-1.5 w-28">Montant TTC</th>
                     <th className="w-16" />
                   </tr>
@@ -226,16 +231,22 @@ export default function SectionFacturesFournisseurs() {
                             className={`${CHAMP} truncate placeholder-primary-300`}
                           />
                         </td>
-                        <td className="px-1.5 py-0 whitespace-nowrap">
-                          <input
-                            type="date"
-                            value={f.date_echeance}
-                            onChange={(e) => { if (e.target.value) modifier(f.id, { date_echeance: e.target.value }) }}
-                            className={`${CHAMP} w-32 inline-block`}
-                          />
-                          {!payee && (
-                            <span className={`ml-1 text-[11px] ${couleur}`}>{libelleEcheance(jours)}</span>
-                          )}
+                        {/* Flex + min-w-0 : « en retard de N jours » est plus long que
+                            « dans N jours » et débordait sur la colonne Montant. */}
+                        <td className="px-1.5 py-0">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <input
+                              type="date"
+                              value={f.date_echeance}
+                              onChange={(e) => { if (e.target.value) modifier(f.id, { date_echeance: e.target.value }) }}
+                              className={`${CHAMP_BASE} w-32 flex-shrink-0`}
+                            />
+                            {!payee && (
+                              <span className={`text-[11px] truncate ${couleur}`} title={libelleEcheance(jours)}>
+                                {libelleEcheance(jours)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-1.5 py-0">
                           <input
